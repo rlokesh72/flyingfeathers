@@ -825,12 +825,12 @@ export default function DashboardPage() {
                     <th className="text-left py-3 px-2 text-cyan-400">Rank</th>
                     <th className="text-left py-3 px-2 text-cyan-400">Team</th>
                     <th className="text-left py-3 px-2 text-cyan-400">Players</th>
+                    <th className="text-center py-3 px-2 text-cyan-400">MP</th>
                     <th className="text-center py-3 px-2 text-cyan-400">W</th>
                     <th className="text-center py-3 px-2 text-cyan-400">L</th>
                     <th className="text-center py-3 px-2 text-cyan-400">PF</th>
                     <th className="text-center py-3 px-2 text-cyan-400">PA</th>
                     <th className="text-center py-3 px-2 text-cyan-400">+/-</th>
-                    <th className="text-center py-3 px-2 text-cyan-400">MP</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -869,6 +869,9 @@ export default function DashboardPage() {
                         </div>
                       </td>
                       <td className="py-3 px-2 text-center">
+                        <span className="text-slate-300">{team.matchesPlayed}</span>
+                      </td>
+                      <td className="py-3 px-2 text-center">
                         <span className="text-green-400 font-bold">{team.wins}</span>
                       </td>
                       <td className="py-3 px-2 text-center">
@@ -889,16 +892,13 @@ export default function DashboardPage() {
                           {team.pointDifference > 0 ? '+' : ''}{team.pointDifference}
                         </span>
                       </td>
-                      <td className="py-3 px-2 text-center">
-                        <span className="text-slate-300">{team.matchesPlayed}</span>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div className="mt-4 text-xs text-slate-400 text-center">
-              W = Wins | L = Losses | PF = Points For | PA = Points Against | +/- = Point Difference | MP = Matches Played
+              MP = Matches Played | W = Wins | L = Losses | PF = Points For | PA = Points Against | +/- = Point Difference
             </div>
           </CardContent>
         </Card>
