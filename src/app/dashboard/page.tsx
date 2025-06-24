@@ -1065,6 +1065,13 @@ export default function DashboardPage() {
               Back to Home
             </Button>
             <Button 
+              onClick={() => router.push('/change-password')}
+              variant="outline" 
+              className="border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white"
+            >
+              Change Password
+            </Button>
+            <Button 
               onClick={handleLogout}
               variant="outline" 
               className="border-pink-500 text-pink-400 hover:bg-pink-500 hover:text-white"

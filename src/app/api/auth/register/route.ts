@@ -6,6 +6,33 @@ import { sendApprovalEmail } from '@/lib/email';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-here-change-this-in-production';
 
+// Password validation function
+function validatePassword(password: string): { isValid: boolean; message: string } {
+  const minLength = 8;
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumbers = /\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+  if (password.length < minLength) {
+    return { isValid: false, message: 'Password must be at least 8 characters long' };
+  }
+  if (!hasUpperCase) {
+    return { isValid: false, message: 'Password must contain at least one uppercase letter' };
+  }
+  if (!hasLowerCase) {
+    return { isValid: false, message: 'Password must contain at least one lowercase letter' };
+  }
+  if (!hasNumbers) {
+    return { isValid: false, message: 'Password must contain at least one number' };
+  }
+  if (!hasSpecialChar) {
+    return { isValid: false, message: 'Password must contain at least one special character (!@#$%^&*(),.?":{}|<>)' };
+  }
+  
+  return { isValid: true, message: 'Password is valid' };
+}
+
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
@@ -15,6 +42,15 @@ export async function POST(request: NextRequest) {
     if (!name || !email || !password) {
       return NextResponse.json(
         { error: 'Name, email, and password are required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      return NextResponse.json(
+        { error: passwordValidation.message },
         { status: 400 }
       );
     }
