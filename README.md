@@ -148,3 +148,6 @@ This project is licensed under the MIT License.
 Flying Feathers Badminton Club Edinburgh is dedicated to fostering competitive spirit and sportsmanship in the badminton community. Our tournament management system ensures fair play and accurate tracking of all matches and results.
 
 **Chief Organiser**: Samsheer Abdullah
+
+---
+*Last updated: January 2025*
