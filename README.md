@@ -151,3 +151,4 @@ Flying Feathers Badminton Club Edinburgh is dedicated to fostering competitive s
 
 ---
 *Last updated: January 2025*
+# Deployment trigger Wed Jun 25 00:08:25 BST 2025
