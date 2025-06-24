@@ -215,7 +215,9 @@ export default function DashboardPage() {
 
   const fetchTournaments = async () => {
     try {
-      const response = await fetch('/api/tournaments');
+      const response = await fetch('/api/tournaments', {
+        credentials: 'include', // Include cookies
+      });
       if (response.ok) {
         const data = await response.json();
         setTournaments(data.tournaments);
@@ -239,6 +241,7 @@ export default function DashboardPage() {
       const response = await fetch('/api/tournaments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Include cookies
         body: JSON.stringify(formData),
       });
 
@@ -268,6 +271,7 @@ export default function DashboardPage() {
       const response = await fetch(`/api/tournaments/${selectedTournament._id}/teams`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Include cookies
         body: JSON.stringify({ teamIndex, teamName, players }),
       });
 
@@ -298,6 +302,7 @@ export default function DashboardPage() {
         try {
           const response = await fetch(`/api/tournaments/${tournamentId}`, {
             method: 'DELETE',
+            credentials: 'include', // Include cookies
           });
 
           if (response.ok) {
@@ -326,11 +331,14 @@ export default function DashboardPage() {
     try {
       const response = await fetch(`/api/tournaments/${selectedTournament._id}/confirm`, {
         method: 'POST',
+        credentials: 'include', // Include cookies
       });
       
       if (response.ok) {
         // Refresh tournament data
-        const tournamentResponse = await fetch('/api/tournaments');
+        const tournamentResponse = await fetch('/api/tournaments', {
+          credentials: 'include', // Include cookies
+        });
         if (tournamentResponse.ok) {
           const data = await tournamentResponse.json();
           const updatedTournament = data.tournaments.find((t: Tournament) => t._id === selectedTournament._id);
@@ -359,6 +367,7 @@ export default function DashboardPage() {
     try {
       const response = await fetch(`/api/tournaments/${selectedTournament._id}/start`, {
         method: 'POST',
+        credentials: 'include', // Include cookies
       });
 
       if (response.ok) {
@@ -391,12 +400,15 @@ export default function DashboardPage() {
       const response = await fetch(`/api/tournaments/${selectedTournament._id}/matches/${matchIndex}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Include cookies
         body: JSON.stringify({ team1Score, team2Score, status: 'completed' }),
       });
 
       if (response.ok) {
         // Refresh tournament data
-        const tournamentResponse = await fetch('/api/tournaments');
+        const tournamentResponse = await fetch('/api/tournaments', {
+          credentials: 'include', // Include cookies
+        });
         if (tournamentResponse.ok) {
           const data = await tournamentResponse.json();
           const updatedTournament = data.tournaments.find((t: Tournament) => t._id === selectedTournament._id);
@@ -423,7 +435,9 @@ export default function DashboardPage() {
     if (!selectedTournament) return;
 
     try {
-      const response = await fetch(`/api/tournaments/${selectedTournament._id}/standings`);
+      const response = await fetch(`/api/tournaments/${selectedTournament._id}/standings`, {
+        credentials: 'include', // Include cookies
+      });
       if (response.ok) {
         const data = await response.json();
         setCurrentStandings(data.standings);
@@ -444,6 +458,7 @@ export default function DashboardPage() {
         try {
           const response = await fetch(`/api/tournaments/${selectedTournament._id}/complete`, {
             method: 'POST',
+            credentials: 'include', // Include cookies
           });
           
           if (response.ok) {
