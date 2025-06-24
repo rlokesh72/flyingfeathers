@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
 import Tournament from '@/models/Tournament';
+import User from '@/models/User';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-here-change-this-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'your-jwt-secret-here-change-this-in-production';
 
 // Helper function to verify JWT token
 function verifyToken(request: NextRequest) {

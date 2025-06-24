@@ -518,6 +518,17 @@ export default function DashboardPage() {
       scheduledDate: '',
     });
 
+    // Initialize with current date and time when form opens
+    useEffect(() => {
+      if (showCreateForm && !formData.scheduledDate) {
+        const now = new Date();
+        // Set to next hour, rounded up
+        now.setHours(now.getHours() + 1, 0, 0, 0);
+        const localDateTime = now.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+        setFormData(prev => ({ ...prev, scheduledDate: localDateTime }));
+      }
+    }, [showCreateForm, formData.scheduledDate]);
+
     const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       createTournament(formData);
@@ -626,15 +637,20 @@ export default function DashboardPage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Scheduled Date
+                Scheduled Date & Time
               </label>
               <input
                 type="datetime-local"
                 value={formData.scheduledDate}
                 onChange={(e) => setFormData({...formData, scheduledDate: e.target.value})}
                 required
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                min={new Date().toISOString().slice(0, 16)} // Prevent past dates
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white [color-scheme:dark]"
+                title="Select tournament date and time"
               />
+              <p className="text-xs text-slate-400 mt-1">
+                Select when the tournament will take place
+              </p>
             </div>
 
             <div className="flex gap-2">
