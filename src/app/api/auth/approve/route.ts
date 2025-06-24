@@ -26,6 +26,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get the base URL for redirects
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://flyingfeathers.vercel.app';
+    const loginUrl = `${baseUrl}/login`;
+
     if (user.isApproved) {
       // Return success page even if already approved
       return new NextResponse(`
@@ -49,7 +53,7 @@ export async function GET(request: NextRequest) {
             <div class="message">
               The admin account for <strong>${user.email}</strong> has already been approved and is active.
             </div>
-            <a href="http://localhost:3000/login" class="button">Go to Login</a>
+            <a href="${loginUrl}" class="button">Go to Login</a>
           </div>
         </body>
         </html>
@@ -88,7 +92,7 @@ export async function GET(request: NextRequest) {
             The admin account for <strong>${user.email}</strong> has been approved and is now active.<br><br>
             <strong>${user.name}</strong> can now log in to the tournament management system.
           </div>
-          <a href="http://localhost:3000/login" class="button">Go to Login Page</a>
+          <a href="${loginUrl}" class="button">Go to Login Page</a>
         </div>
       </body>
       </html>

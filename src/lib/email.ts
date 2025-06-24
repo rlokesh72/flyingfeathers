@@ -10,21 +10,38 @@ interface SendApprovalEmailParams {
 }
 
 export async function sendApprovalEmail({ adminName, adminEmail, approvalToken }: SendApprovalEmailParams) {
-  const approvalUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/auth/approve?token=${approvalToken}`;
+  // Use production URL if available, fallback to localhost for dev, then fallback to vercel app URL
+  const baseUrl = process.env.NEXTAUTH_URL || 
+                  (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://flyingfeathers.vercel.app');
+  const approvalUrl = `${baseUrl}/api/auth/approve?token=${approvalToken}`;
   
   // If Resend is not configured, log the approval details instead
   if (!resend) {
-    console.log('Email service not configured. Approval details:');
+    console.log('==========================================');
+    console.log('EMAIL SERVICE NOT CONFIGURED');
+    console.log('==========================================');
+    console.log('IMPORTANT: RESEND_API_KEY is missing!');
+    console.log('Admin approval request details:');
     console.log('Admin Name:', adminName);
     console.log('Admin Email:', adminEmail);
     console.log('Approval URL:', approvalUrl);
-    return { success: true, data: { message: 'Email service not configured, but approval logged' } };
+    console.log('==========================================');
+    console.log('TO APPROVE: Visit the approval URL above');
+    console.log('==========================================');
+    
+    // For production without email service, we could implement alternative notification
+    if (process.env.NODE_ENV === 'production') {
+      console.error('CRITICAL: Email service not configured in production!');
+      console.error('Manual approval required. Visit:', approvalUrl);
+    }
+    
+    return { success: true, data: { message: 'Email service not configured, approval details logged', approvalUrl } };
   }
   
   try {
     const { data, error } = await resend.emails.send({
       from: 'Flying Feathers <onboarding@resend.dev>', // Use Resend's domain for testing
-      to: 'witytech@gmail.com',
+      to: 'witytech@gmail.com', // Admin email - this should be configurable
       subject: 'New Admin Registration Approval Request - Flying Feathers',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0f172a; color: #e2e8f0; border-radius: 10px;">
@@ -38,6 +55,7 @@ export async function sendApprovalEmail({ adminName, adminEmail, approvalToken }
             <p style="margin: 10px 0;"><strong>Name:</strong> ${adminName}</p>
             <p style="margin: 10px 0;"><strong>Email:</strong> ${adminEmail}</p>
             <p style="margin: 10px 0;"><strong>Registration Date:</strong> ${new Date().toLocaleString()}</p>
+            <p style="margin: 10px 0;"><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
           </div>
           
           <div style="text-align: center; margin: 30px 0;">

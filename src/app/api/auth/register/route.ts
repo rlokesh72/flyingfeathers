@@ -77,8 +77,9 @@ export async function POST(request: NextRequest) {
     });
 
     // Send approval email
+    let emailResult;
     try {
-      await sendApprovalEmail({
+      emailResult = await sendApprovalEmail({
         adminName: user.name,
         adminEmail: user.email,
         approvalToken,
@@ -86,12 +87,24 @@ export async function POST(request: NextRequest) {
     } catch (emailError) {
       console.error('Failed to send approval email:', emailError);
       // Don't fail registration if email fails
+      emailResult = { success: false, error: emailError };
     }
 
-    return NextResponse.json({
+    // If in development or email failed, provide manual approval info
+    const responseData: any = {
       message: 'Registration submitted successfully. Please wait for admin approval. You will receive an email notification once approved.',
       status: 'pending_approval'
-    });
+    };
+
+    // In development or when email service is not configured, include approval URL for testing
+    if (process.env.NODE_ENV === 'development' || !emailResult?.success) {
+      const baseUrl = process.env.NEXTAUTH_URL || 
+                      (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://flyingfeathers.vercel.app');
+      responseData.manualApprovalUrl = `${baseUrl}/api/auth/approve?token=${approvalToken}`;
+      responseData.note = 'Email service may not be configured. Use the manual approval URL if needed.';
+    }
+
+    return NextResponse.json(responseData);
 
   } catch (error) {
     console.error('Registration error:', error);
