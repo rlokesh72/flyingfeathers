@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 
-// Initialize Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend only if API key is available
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 interface SendApprovalEmailParams {
   adminName: string;
@@ -11,6 +11,15 @@ interface SendApprovalEmailParams {
 
 export async function sendApprovalEmail({ adminName, adminEmail, approvalToken }: SendApprovalEmailParams) {
   const approvalUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/auth/approve?token=${approvalToken}`;
+  
+  // If Resend is not configured, log the approval details instead
+  if (!resend) {
+    console.log('Email service not configured. Approval details:');
+    console.log('Admin Name:', adminName);
+    console.log('Admin Email:', adminEmail);
+    console.log('Approval URL:', approvalUrl);
+    return { success: true, data: { message: 'Email service not configured, but approval logged' } };
+  }
   
   try {
     const { data, error } = await resend.emails.send({
