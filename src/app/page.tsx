@@ -1,103 +1,172 @@
-import Image from "next/image";
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Home() {
+  const router = useRouter();
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      {/* Hero Section */}
+      <div className="container mx-auto px-4 py-16">
+        <div className="text-center mb-16">
+          {/* Logo/Brand Section */}
+          <div className="mb-8">
+            <div className="inline-flex items-center justify-center w-32 h-32 mb-6">
+              <img 
+                src="/flying-feathers-logo.png" 
+                alt="Flying Feathers Badminton Club Logo" 
+                className="w-full h-full object-contain rounded-2xl"
+              />
+            </div>
+            <h1 className="text-5xl font-bold text-white mb-2">
+              FLYING FEATHERS
+            </h1>
+            <p className="text-2xl text-cyan-400 font-semibold mb-4">
+              BADMINTON CLUB EDINBURGH
+            </p>
+            <p className="text-xl text-slate-300 max-w-2xl mx-auto">
+              Admin portal for Edinburgh&apos;s premier badminton tournament management system
+            </p>
+          </div>
+          
+          <div className="flex gap-4 justify-center mb-16">
+            <Button 
+              size="lg" 
+              onClick={() => router.push('/login')}
+              className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white border-0"
+            >
+              Admin Login
+            </Button>
+            <Button 
+              variant="outline" 
+              size="lg" 
+              onClick={() => router.push('/schedules')}
+              className="border-pink-500 text-pink-400 hover:bg-pink-500 hover:text-white"
+            >
+              View Schedules
+            </Button>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {/* Feature Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto mb-16">
+          <Card className="bg-slate-800 border-slate-700 hover:border-cyan-500 transition-colors">
+            <CardHeader>
+              <CardTitle className="text-cyan-400 flex items-center gap-2">
+                🏆 Tournament Management
+              </CardTitle>
+              <CardDescription className="text-slate-300">
+                Organize and manage badminton tournaments with ease
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-400">
+                Create tournaments, manage brackets, track scores, and generate results in real-time.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800 border-slate-700 hover:border-pink-500 transition-colors">
+            <CardHeader>
+              <CardTitle className="text-pink-400 flex items-center gap-2">
+                👥 Player Registration
+              </CardTitle>
+              <CardDescription className="text-slate-300">
+                Streamlined registration process for all skill levels
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-400">
+                Easy online registration with player profiles, skill ratings, and tournament history.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800 border-slate-700 hover:border-cyan-500 transition-colors">
+            <CardHeader>
+              <CardTitle className="text-cyan-400 flex items-center gap-2">
+                📊 Live Scoring
+              </CardTitle>
+              <CardDescription className="text-slate-300">
+                Real-time match scoring and leaderboards
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-400">
+                Digital scorekeeping with live updates, match statistics, and automatic bracket progression.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800 border-slate-700 hover:border-pink-500 transition-colors">
+            <CardHeader>
+              <CardTitle className="text-pink-400 flex items-center gap-2">
+                📅 Court Scheduling
+              </CardTitle>
+              <CardDescription className="text-slate-300">
+                Efficient court allocation and time management
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-400">
+                Smart court scheduling system that optimizes playing time and minimizes wait periods.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800 border-slate-700 hover:border-cyan-500 transition-colors">
+            <CardHeader>
+              <CardTitle className="text-cyan-400 flex items-center gap-2">
+                🎯 Rankings & Stats
+              </CardTitle>
+              <CardDescription className="text-slate-300">
+                Comprehensive player rankings and statistics
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-400">
+                Track player performance, maintain ELO ratings, and generate detailed match analytics.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800 border-slate-700 hover:border-pink-500 transition-colors">
+            <CardHeader>
+              <CardTitle className="text-pink-400 flex items-center gap-2">
+                📱 Mobile Friendly
+              </CardTitle>
+              <CardDescription className="text-slate-300">
+                Access from any device, anywhere
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-400">
+                Responsive design ensures seamless experience on mobile, tablet, and desktop devices.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+
+
+        {/* Club Information Section - Bottom */}
+        <div className="text-center border-t border-slate-700 pt-8">
+          <div className="max-w-md mx-auto">
+            <p className="text-slate-400 text-sm mb-4">
+              Learn more about our club
+            </p>
+            <Button 
+              variant="ghost" 
+              onClick={() => router.push('/club-info')}
+              className="text-pink-400 hover:text-pink-300 hover:bg-pink-900/20 border border-pink-500/30 hover:border-pink-400"
+            >
+              View Club Information
+            </Button>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
