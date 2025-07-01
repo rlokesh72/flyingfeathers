@@ -26,9 +26,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = verifyToken(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { searchParams } = new URL(request.url);
+    const isPublic = searchParams.get('public') === 'true';
+    
+    // For public access, don't require authentication
+    if (!isPublic) {
+      const user = verifyToken(request);
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
 
     const { id } = await params;
@@ -39,6 +45,14 @@ export async function GET(
       return NextResponse.json(
         { error: 'Tournament not found' },
         { status: 404 }
+      );
+    }
+
+    // For public access, only allow viewing standings for confirmed, in-progress, or completed tournaments
+    if (isPublic && !['confirmed', 'in-progress', 'completed'].includes(tournament.status)) {
+      return NextResponse.json(
+        { error: 'Tournament not available for public viewing' },
+        { status: 403 }
       );
     }
 

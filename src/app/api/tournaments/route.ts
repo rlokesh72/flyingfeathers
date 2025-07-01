@@ -24,14 +24,29 @@ function verifyToken(request: NextRequest) {
 // GET - List all tournaments
 export async function GET(request: NextRequest) {
   try {
-    const user = verifyToken(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { searchParams } = new URL(request.url);
+    const isPublic = searchParams.get('public') === 'true';
+    
+    // For public access, don't require authentication
+    if (!isPublic) {
+      const user = verifyToken(request);
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
 
     await connectDB();
     
-    const tournaments = await Tournament.find({})
+    let query = {};
+    
+    // For public access, only show confirmed, in-progress, or completed tournaments
+    if (isPublic) {
+      query = {
+        status: { $in: ['confirmed', 'in-progress', 'completed'] }
+      };
+    }
+    
+    const tournaments = await Tournament.find(query)
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
 

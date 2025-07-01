@@ -38,9 +38,9 @@ export async function PUT(
     const { id: tournamentId, matchIndex: matchIndexStr } = await params;
     const matchIndex = parseInt(matchIndexStr);
 
-    if (isNaN(matchIndex) || team1Score < 0 || team2Score < 0) {
+    if (isNaN(matchIndex) || team1Score < 0 || team2Score < 0 || team1Score > 30 || team2Score > 30) {
       return NextResponse.json(
-        { error: 'Invalid match index or scores' },
+        { error: 'Invalid match index or scores. Scores must be between 0 and 30.' },
         { status: 400 }
       );
     }

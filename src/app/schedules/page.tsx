@@ -35,9 +35,23 @@ interface Tournament {
   createdAt: string;
 }
 
+interface TeamStats {
+  teamIndex: number;
+  teamName: string;
+  players: string[];
+  wins: number;
+  losses: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  pointDifference: number;
+  matchesPlayed: number;
+}
+
 export default function SchedulesPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
+  const [standings, setStandings] = useState<TeamStats[]>([]);
+  const [showStandings, setShowStandings] = useState(false);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -47,7 +61,7 @@ export default function SchedulesPage() {
 
   const fetchTournaments = async () => {
     try {
-      const response = await fetch('/api/tournaments');
+      const response = await fetch('/api/tournaments?public=true');
       if (response.ok) {
         const data = await response.json();
         setTournaments(data.tournaments);
@@ -56,6 +70,19 @@ export default function SchedulesPage() {
       console.error('Error fetching tournaments:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStandings = async (tournamentId: string) => {
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/standings?public=true`);
+      if (response.ok) {
+        const data = await response.json();
+        setStandings(data.standings);
+        setShowStandings(true);
+      }
+    } catch (error) {
+      console.error('Error fetching standings:', error);
     }
   };
 
@@ -144,6 +171,61 @@ export default function SchedulesPage() {
     );
   };
 
+  const StandingsTable = () => {
+    return (
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-white mb-4 text-center">Tournament Standings</h2>
+        <Card className="bg-slate-800 border-slate-700">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-700">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-cyan-400 font-semibold">Rank</th>
+                    <th className="px-4 py-3 text-left text-cyan-400 font-semibold">Team</th>
+                    <th className="px-4 py-3 text-left text-cyan-400 font-semibold">Players</th>
+                    <th className="px-4 py-3 text-center text-cyan-400 font-semibold">MP</th>
+                    <th className="px-4 py-3 text-center text-cyan-400 font-semibold">W</th>
+                    <th className="px-4 py-3 text-center text-cyan-400 font-semibold">L</th>
+                    <th className="px-4 py-3 text-center text-cyan-400 font-semibold">PF</th>
+                    <th className="px-4 py-3 text-center text-cyan-400 font-semibold">PA</th>
+                    <th className="px-4 py-3 text-center text-cyan-400 font-semibold">+/-</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {standings.map((team, index) => (
+                    <tr key={team.teamIndex} className={`border-t border-slate-600 ${index === 0 ? 'bg-yellow-900/20' : index === 1 ? 'bg-slate-700/50' : index === 2 ? 'bg-amber-900/20' : ''}`}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center">
+                          <span className={`font-bold ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-slate-300' : index === 2 ? 'text-amber-600' : 'text-slate-300'}`}>
+                            #{index + 1}
+                          </span>
+                          {index === 0 && <span className="ml-2 text-yellow-400">🏆</span>}
+                          {index === 1 && <span className="ml-2 text-slate-300">🥈</span>}
+                          {index === 2 && <span className="ml-2 text-amber-600">🥉</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-300 font-medium">{team.teamName}</td>
+                      <td className="px-4 py-3 text-slate-400 text-sm">{team.players.join(', ')}</td>
+                      <td className="px-4 py-3 text-center text-slate-300 font-semibold">{team.matchesPlayed}</td>
+                      <td className="px-4 py-3 text-center text-green-400 font-semibold">{team.wins}</td>
+                      <td className="px-4 py-3 text-center text-red-400 font-semibold">{team.losses}</td>
+                      <td className="px-4 py-3 text-center text-cyan-400 font-semibold">{team.pointsFor}</td>
+                      <td className="px-4 py-3 text-center text-pink-400 font-semibold">{team.pointsAgainst}</td>
+                      <td className={`px-4 py-3 text-center font-semibold ${team.pointDifference > 0 ? 'text-green-400' : team.pointDifference < 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                        {team.pointDifference > 0 ? '+' : ''}{team.pointDifference}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
@@ -220,8 +302,30 @@ export default function SchedulesPage() {
                       <div className="text-slate-400">Status</div>
                     </div>
                   </div>
+                  <div className="flex gap-2 mb-4">
+                    <Button 
+                      onClick={() => {
+                        setShowStandings(false);
+                      }}
+                      className={`flex-1 ${!showStandings ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700' : 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800'} text-white border-0`}
+                      disabled={!selectedTournament.matches || selectedTournament.matches.length === 0}
+                    >
+                      View Matches
+                    </Button>
+                    <Button 
+                      onClick={() => fetchStandings(selectedTournament._id)}
+                      className={`flex-1 ${showStandings ? 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700' : 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800'} text-white border-0`}
+                      disabled={!selectedTournament.matches || selectedTournament.matches.length === 0}
+                    >
+                      View Standings
+                    </Button>
+                  </div>
                   <Button 
-                    onClick={() => setSelectedTournament(null)}
+                    onClick={() => {
+                      setSelectedTournament(null);
+                      setShowStandings(false);
+                      setStandings([]);
+                    }}
                     className="w-full bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white border-0"
                   >
                     Back to Tournament List
@@ -230,28 +334,42 @@ export default function SchedulesPage() {
               </Card>
             </div>
 
-            {/* Match Schedule */}
-            {selectedTournament.matches.length > 0 ? (
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold text-white mb-4 text-center">Match Schedule</h2>
-                <div className="text-center mb-4 text-slate-300">
-                  <div className="text-lg">
-                    Total Matches: <span className="text-cyan-400 font-bold">{selectedTournament.matches.length}</span>
-                  </div>
-                  <div className="text-sm text-slate-400">
-                    Completed: {selectedTournament.matches.filter(m => m.status === 'completed').length} / {selectedTournament.matches.length}
-                  </div>
-                </div>
-                <MatchSchedule tournament={selectedTournament} />
-              </div>
+            {/* Content Area - Show either matches or standings */}
+            {showStandings ? (
+              standings.length > 0 ? (
+                <StandingsTable />
+              ) : (
+                <Card className="max-w-md mx-auto bg-slate-800 border-slate-700">
+                  <CardContent className="text-center py-8">
+                    <div className="text-4xl mb-4">📊</div>
+                    <div className="text-slate-300">No standings data available</div>
+                    <div className="text-slate-500 text-sm">Standings will appear once matches are completed</div>
+                  </CardContent>
+                </Card>
+              )
             ) : (
-              <Card className="max-w-md mx-auto bg-slate-800 border-slate-700">
-                <CardContent className="text-center py-8">
-                  <div className="text-4xl mb-4">📅</div>
-                  <div className="text-slate-300">No matches scheduled yet</div>
-                  <div className="text-slate-500 text-sm">Matches will appear once the tournament starts</div>
-                </CardContent>
-              </Card>
+              selectedTournament.matches.length > 0 ? (
+                <div className="mb-8">
+                  <h2 className="text-2xl font-bold text-white mb-4 text-center">Match Schedule</h2>
+                  <div className="text-center mb-4 text-slate-300">
+                    <div className="text-lg">
+                      Total Matches: <span className="text-cyan-400 font-bold">{selectedTournament.matches.length}</span>
+                    </div>
+                    <div className="text-sm text-slate-400">
+                      Completed: {selectedTournament.matches.filter(m => m.status === 'completed').length} / {selectedTournament.matches.length}
+                    </div>
+                  </div>
+                  <MatchSchedule tournament={selectedTournament} />
+                </div>
+              ) : (
+                <Card className="max-w-md mx-auto bg-slate-800 border-slate-700">
+                  <CardContent className="text-center py-8">
+                    <div className="text-4xl mb-4">📅</div>
+                    <div className="text-slate-300">No matches scheduled yet</div>
+                    <div className="text-slate-500 text-sm">Matches will appear once the tournament starts</div>
+                  </CardContent>
+                </Card>
+              )
             )}
           </div>
         ) : (
@@ -298,7 +416,7 @@ export default function SchedulesPage() {
                         className="w-full bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white border-0"
                         disabled={!tournament.matches || tournament.matches.length === 0}
                       >
-                        {tournament.matches && tournament.matches.length > 0 ? 'View Schedule' : 'No Schedule Yet'}
+                        {tournament.matches && tournament.matches.length > 0 ? 'View Tournament' : 'No Schedule Yet'}
                       </Button>
                     </CardContent>
                   </Card>

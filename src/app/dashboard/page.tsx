@@ -911,12 +911,43 @@ export default function DashboardPage() {
     const [editingMatch, setEditingMatch] = useState<number | null>(null);
     const [scoreData, setScoreData] = useState({ team1Score: 0, team2Score: 0 });
 
+    // Score validation and input handling function
+    const handleScoreInput = (value: string, scoreType: 'team1Score' | 'team2Score') => {
+      // Remove any non-digit characters
+      let cleanValue = value.replace(/[^0-9]/g, '');
+      
+      // If empty, set to '0'
+      if (cleanValue === '') {
+        cleanValue = '0';
+      }
+      
+      // Remove leading zeros except for single '0'
+      if (cleanValue.length > 1 && cleanValue.startsWith('0')) {
+        cleanValue = cleanValue.replace(/^0+/, '');
+        // If all zeros, keep one
+        if (cleanValue === '') {
+          cleanValue = '0';
+        }
+      }
+      
+      // Limit to 30
+      const numValue = parseInt(cleanValue, 10);
+      if (numValue > 30) {
+        cleanValue = '30';
+      }
+      
+      setScoreData(prev => ({
+        ...prev,
+        [scoreType]: parseInt(cleanValue, 10)
+      }));
+    };
+
     const startScoreEdit = (matchIndex: number, match: Match) => {
+      setEditingMatch(matchIndex);
       setScoreData({
         team1Score: match.team1Score || 0,
-        team2Score: match.team2Score || 0
+        team2Score: match.team2Score || 0,
       });
-      setEditingMatch(matchIndex);
     };
 
     const saveScore = (matchIndex: number) => {
@@ -963,13 +994,17 @@ export default function DashboardPage() {
                           </div>
                           {editingMatch === match.index ? (
                             <input
-                              type="number"
+                              type="text"
                               value={scoreData.team1Score}
-                              onChange={(e) => setScoreData({...scoreData, team1Score: parseInt(e.target.value) || 0})}
+                              onChange={(e) => handleScoreInput(e.target.value, 'team1Score')}
+                              onInput={(e) => handleScoreInput((e.target as HTMLInputElement).value, 'team1Score')}
                               className="w-20 px-3 py-2 bg-slate-600 border-2 border-cyan-500 rounded-md text-white text-center text-lg font-semibold focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
                               min="0"
+                              max="30"
                               placeholder="0"
                               autoFocus
+                              inputMode="numeric"
+                              pattern="[0-9]*"
                             />
                           ) : (
                             <div className="text-2xl font-bold text-cyan-400">
@@ -989,12 +1024,16 @@ export default function DashboardPage() {
                           </div>
                           {editingMatch === match.index ? (
                             <input
-                              type="number"
+                              type="text"
                               value={scoreData.team2Score}
-                              onChange={(e) => setScoreData({...scoreData, team2Score: parseInt(e.target.value) || 0})}
+                              onChange={(e) => handleScoreInput(e.target.value, 'team2Score')}
+                              onInput={(e) => handleScoreInput((e.target as HTMLInputElement).value, 'team2Score')}
                               className="w-20 px-3 py-2 bg-slate-600 border-2 border-pink-500 rounded-md text-white text-center text-lg font-semibold focus:outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20"
                               min="0"
+                              max="30"
                               placeholder="0"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
                             />
                           ) : (
                             <div className="text-2xl font-bold text-pink-400">
@@ -1028,10 +1067,16 @@ export default function DashboardPage() {
                               size="sm"
                               variant="outline"
                               onClick={() => startScoreEdit(match.index, match)}
-                              className="w-full border-cyan-500 text-cyan-400 hover:bg-cyan-500 hover:text-white"
-                              disabled={match.status === 'completed'}
+                              className={`w-full ${
+                                match.team1Score !== undefined && match.team2Score !== undefined
+                                  ? 'border-yellow-500 text-yellow-400 hover:bg-yellow-500 hover:text-black'
+                                  : 'border-cyan-500 text-cyan-400 hover:bg-cyan-500 hover:text-white'
+                              }`}
                             >
-                              {match.status === 'completed' ? 'Completed' : 'Log Score'}
+                              {match.team1Score !== undefined && match.team2Score !== undefined
+                                ? 'Edit Score'
+                                : 'Log Score'
+                              }
                             </Button>
                           )}
                         </div>
@@ -1088,6 +1133,18 @@ export default function DashboardPage() {
             Welcome back, {user.name}!
           </p>
           <div className="flex gap-4 justify-center mb-6">
+            {selectedTournament && (
+              <Button 
+                onClick={() => {
+                  setSelectedTournament(null);
+                  setShowMatches(false);
+                }}
+                variant="outline"
+                className="border-teal-500 text-teal-400 hover:bg-teal-500 hover:text-white"
+              >
+                ← Back to Tournament List
+              </Button>
+            )}
             <Button 
               onClick={() => router.push('/change-password')}
               variant="outline" 
@@ -1142,104 +1199,117 @@ export default function DashboardPage() {
                       <div className="text-slate-400">Status</div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    <Button 
-                      onClick={() => {
-                        setSelectedTournament(null);
-                        setShowMatches(false);
-                      }}
-                      className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white border-0"
-                    >
-                      Back to Tournament List
-                    </Button>
-                    
-                    {/* Confirm Tournament Button - Show when all teams have 2 players */}
-                    {selectedTournament.status === 'scheduled' && 
-                     selectedTournament.teams.every(team => team.players.length === 2) && (
-                      <Button 
-                        onClick={confirmTournament}
-                        disabled={loading}
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0"
-                      >
-                        {loading ? 'Confirming...' : 'Confirm Tournament'}
-                      </Button>
-                    )}
-                    
-                    {/* Start Tournament Button - Show when confirmed */}
-                    {selectedTournament.status === 'confirmed' && (
-                      <Button 
-                        onClick={startTournament}
-                        disabled={loading}
-                        className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0"
-                      >
-                        {loading ? 'Starting...' : 'Start Tournament'}
-                      </Button>
-                    )}
-                    
-                    {/* View/Manage Toggle - Show when in progress */}
-                    {selectedTournament.status === 'in-progress' && (
-                      <>
-                        <Button 
-                          onClick={() => {
-                            setShowMatches(!showMatches);
-                            setShowStandings(false);
-                            if (!showMatches) fetchStandings();
-                          }}
-                          className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white border-0"
-                        >
-                          {showMatches ? 'Manage Teams' : 'View Matches'}
-                        </Button>
-                        <Button 
-                          onClick={() => {
-                            setShowStandings(!showStandings);
-                            setShowMatches(false);
-                            if (!showStandings) fetchStandings();
-                          }}
-                          className="bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white border-0"
-                        >
-                          {showStandings ? 'Hide Standings' : 'View Standings'}
-                        </Button>
-                        <Button 
-                          onClick={completeTournament}
-                          disabled={loading}
-                          className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white border-0"
-                        >
-                          {loading ? 'Completing...' : 'Complete Tournament'}
-                        </Button>
-                      </>
-                    )}
+                  
+                  {/* Action Buttons - Organized in rows */}
+                  <div className="space-y-3 mt-6">
+                    {/* Tournament Action Buttons Row */}
+                    <div className="flex flex-wrap justify-center gap-2">
+                        {/* Confirm Tournament Button - Show when all teams have 2 players */}
+                        {selectedTournament.status === 'scheduled' && 
+                         selectedTournament.teams.every(team => team.players.length === 2) && (
+                          <Button 
+                            onClick={confirmTournament}
+                            disabled={loading}
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0"
+                          >
+                            {loading ? 'Confirming...' : '✓ Confirm Tournament'}
+                          </Button>
+                        )}
+                        
+                        {/* Start Tournament Button - Show when confirmed */}
+                        {selectedTournament.status === 'confirmed' && (
+                          <Button 
+                            onClick={startTournament}
+                            disabled={loading}
+                            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0"
+                          >
+                            {loading ? 'Starting...' : '🚀 Start Tournament'}
+                          </Button>
+                        )}
+                      </div>
 
-                    {/* Final Standings - Show when completed */}
-                    {selectedTournament.status === 'completed' && (
-                      <Button 
-                        onClick={async () => {
-                          setShowStandings(!showStandings);
-                          setShowMatches(false);
-                          if (!showStandings) {
-                            // Always fetch fresh standings for completed tournaments
-                            if (selectedTournament.standings) {
-                              setCurrentStandings(selectedTournament.standings);
-                            } else {
-                              // Fallback: fetch from API if standings not in local data
-                              await fetchStandings();
+                      {/* View Controls and Complete Tournament Row - Show when in progress */}
+                      {selectedTournament.status === 'in-progress' && (
+                        <div className="flex flex-wrap justify-center gap-2">
+                          <Button 
+                            onClick={() => {
+                              setShowMatches(!showMatches);
+                              setShowStandings(false);
+                              if (!showMatches) fetchStandings();
+                            }}
+                            variant={showMatches ? "default" : "outline"}
+                            className={`flex-1 min-w-[140px] ${showMatches 
+                              ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white border-0"
+                              : "border-purple-500 text-purple-400 hover:bg-purple-500 hover:text-white"
+                            }`}
+                          >
+                            {showMatches ? '👥 Managing Teams' : '🎯 View Matches'}
+                          </Button>
+                          <Button 
+                            onClick={() => {
+                              setShowStandings(!showStandings);
+                              setShowMatches(false);
+                              if (!showStandings) fetchStandings();
+                            }}
+                            variant={showStandings ? "default" : "outline"}
+                            className={`flex-1 min-w-[140px] ${showStandings
+                              ? "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white border-0"
+                              : "border-indigo-500 text-indigo-400 hover:bg-indigo-500 hover:text-white"
+                            }`}
+                          >
+                            {showStandings ? '📊 Viewing Standings' : '📊 View Standings'}
+                          </Button>
+                          <Button 
+                            onClick={completeTournament}
+                            disabled={loading}
+                            className="flex-1 min-w-[140px] bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white border-0"
+                          >
+                            {loading ? 'Completing...' : '🏆 Complete Tournament'}
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Final Standings - Show when completed */}
+                      {selectedTournament.status === 'completed' && (
+                        <div className="flex flex-wrap justify-center gap-2">
+                          <Button 
+                            onClick={async () => {
+                              setShowStandings(!showStandings);
+                              setShowMatches(false);
+                              if (!showStandings) {
+                                // Always fetch fresh standings for completed tournaments
+                                if (selectedTournament.standings) {
+                                  setCurrentStandings(selectedTournament.standings);
+                                } else {
+                                  // Fallback: fetch from API if standings not in local data
+                                  await fetchStandings();
+                                }
+                              }
+                            }}
+                            disabled={loading}
+                            variant={showStandings ? "default" : "outline"}
+                            className={showStandings
+                              ? "bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white border-0"
+                              : "border-yellow-500 text-yellow-400 hover:bg-yellow-500 hover:text-black"
                             }
-                          }
-                        }}
-                        disabled={loading}
-                        className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white border-0"
-                      >
-                        {loading ? 'Loading...' : (showStandings ? 'Hide Standings' : 'View Final Standings')}
+                          >
+                            {loading ? 'Loading...' : (showStandings ? '🏆 Viewing Results' : '🏆 View Final Results')}
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Danger Zone Row */}
+                      <div className="flex justify-center pt-2 border-t border-slate-700 mt-3">
+                        <Button 
+                          onClick={() => deleteTournament(selectedTournament._id)}
+                          disabled={loading}
+                          variant="outline"
+                          size="sm"
+                          className="border-red-500 text-red-400 hover:bg-red-500 hover:text-white"
+                        >
+                                                  {loading ? 'Deleting...' : '🗑️ Delete Tournament'}
                       </Button>
-                    )}
-                    
-                    <Button 
-                      onClick={() => deleteTournament(selectedTournament._id)}
-                      disabled={loading}
-                      variant="outline"
-                      className="border-red-500 text-red-400 hover:bg-red-500 hover:text-white"
-                    >
-                      {loading ? 'Deleting...' : 'Delete Tournament'}
-                    </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
