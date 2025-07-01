@@ -21,10 +21,12 @@ export async function sendApprovalEmail({ adminName, adminEmail, approvalToken }
     console.log('EMAIL SERVICE NOT CONFIGURED');
     console.log('==========================================');
     console.log('IMPORTANT: RESEND_API_KEY is missing!');
+    console.log('Environment:', process.env.NODE_ENV);
     console.log('Admin approval request details:');
     console.log('Admin Name:', adminName);
     console.log('Admin Email:', adminEmail);
     console.log('Approval URL:', approvalUrl);
+    console.log('Base URL used:', baseUrl);
     console.log('==========================================');
     console.log('TO APPROVE: Visit the approval URL above');
     console.log('==========================================');
@@ -32,6 +34,7 @@ export async function sendApprovalEmail({ adminName, adminEmail, approvalToken }
     // For production without email service, we could implement alternative notification
     if (process.env.NODE_ENV === 'production') {
       console.error('CRITICAL: Email service not configured in production!');
+      console.error('Set RESEND_API_KEY environment variable');
       console.error('Manual approval required. Visit:', approvalUrl);
     }
     
@@ -39,9 +42,13 @@ export async function sendApprovalEmail({ adminName, adminEmail, approvalToken }
   }
   
   try {
+    // Use custom domain if available, fallback to Resend's onboarding domain
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Flying Feathers <onboarding@resend.dev>';
+    const adminEmail = process.env.ADMIN_EMAIL || 'witytech@gmail.com';
+    
     const { data, error } = await resend.emails.send({
-      from: 'Flying Feathers <onboarding@resend.dev>', // Use Resend's domain for testing
-      to: 'witytech@gmail.com', // Admin email - this should be configurable
+      from: fromEmail,
+      to: adminEmail,
       subject: 'New Admin Registration Approval Request - Flying Feathers',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0f172a; color: #e2e8f0; border-radius: 10px;">
@@ -92,11 +99,16 @@ export async function sendApprovalEmail({ adminName, adminEmail, approvalToken }
     });
 
     if (error) {
-      console.error('Error sending approval email:', error);
+      console.error('Resend email error:', error);
+      console.error('From email:', fromEmail);
+      console.error('To email:', adminEmail);
+      console.error('Environment:', process.env.NODE_ENV);
+      console.error('API Key configured:', !!process.env.RESEND_API_KEY);
       return { success: false, error };
     }
 
     console.log('Approval email sent successfully:', data);
+    console.log('From:', fromEmail, 'To:', adminEmail);
     return { success: true, data };
   } catch (error) {
     console.error('Error sending approval email:', error);

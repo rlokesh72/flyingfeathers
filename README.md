@@ -105,10 +105,43 @@ flying-feathers-app/
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `MONGODB_URI` | MongoDB connection string | ✅ Yes |
-| `RESEND_API_KEY` | Resend API key for emails | ❌ Optional |
 | `NEXTAUTH_URL` | Your app URL | ✅ Yes |
 | `NEXTAUTH_SECRET` | Secure random string | ✅ Yes |
+| `RESEND_API_KEY` | Resend API key for emails | ❌ Optional |
 | `ADMIN_EMAIL` | Admin email for notifications | ❌ Optional |
+| `RESEND_FROM_EMAIL` | From email address | ❌ Optional |
+
+### Email Configuration
+
+The app uses [Resend](https://resend.com) for sending admin approval emails. Email configuration is **optional** - the app will work without it.
+
+**Without Email Service:**
+- Admin registration details are logged to console
+- Manual approval URLs are provided in development
+- App functions normally, just without automated emails
+
+**With Email Service (Recommended for Production):**
+
+1. **Get Resend API Key:**
+   - Sign up at [resend.com](https://resend.com)
+   - Create an API key in your dashboard
+   - Add it as `RESEND_API_KEY` environment variable
+
+2. **Configure Email Settings:**
+   ```bash
+   RESEND_API_KEY=re_your_api_key_here
+   ADMIN_EMAIL=admin@yourdomain.com
+   RESEND_FROM_EMAIL=Flying Feathers <noreply@yourdomain.com>
+   ```
+
+3. **Domain Setup (Optional):**
+   - For production, configure a custom domain in Resend
+   - Use your domain in `RESEND_FROM_EMAIL`
+   - Without custom domain, uses Resend's test domain
+
+**Testing Email Configuration:**
+- Visit `/api/health` to check email service status
+- Visit `/api/test-email` to verify configuration without sending emails
 
 ## Deployment
 
