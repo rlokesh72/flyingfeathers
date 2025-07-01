@@ -39,6 +39,9 @@ export async function GET(
 
     const { id } = await params;
     await connectDB();
+    
+    // Ensure User model is registered (fix for MissingSchemaError)
+    User;
 
     const tournament = await Tournament.findById(id);
     if (!tournament) {

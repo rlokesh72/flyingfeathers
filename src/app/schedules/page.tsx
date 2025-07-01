@@ -65,6 +65,8 @@ export default function SchedulesPage() {
       if (response.ok) {
         const data = await response.json();
         setTournaments(data.tournaments);
+      } else {
+        console.error('Failed to fetch tournaments:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Error fetching tournaments:', error);
@@ -233,6 +235,8 @@ export default function SchedulesPage() {
       </div>
     );
   }
+
+
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">

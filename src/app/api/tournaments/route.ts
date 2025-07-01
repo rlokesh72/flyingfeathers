@@ -37,6 +37,9 @@ export async function GET(request: NextRequest) {
 
     await connectDB();
     
+    // Ensure User model is registered (fix for MissingSchemaError)
+    User;
+    
     let query = {};
     
     // For public access, only show confirmed, in-progress, or completed tournaments
