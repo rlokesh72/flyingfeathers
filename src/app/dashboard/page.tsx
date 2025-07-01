@@ -1089,13 +1089,6 @@ export default function DashboardPage() {
           </p>
           <div className="flex gap-4 justify-center mb-6">
             <Button 
-              onClick={() => router.push('/')}
-              variant="outline" 
-              className="border-cyan-500 text-cyan-400 hover:bg-cyan-500 hover:text-white"
-            >
-              Back to Home
-            </Button>
-            <Button 
               onClick={() => router.push('/change-password')}
               variant="outline" 
               className="border-orange-500 text-orange-400 hover:bg-orange-500 hover:text-white"
