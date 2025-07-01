@@ -15,6 +15,23 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Flying Feathers",
   description: "Flying Feathers Badminton Club - Tournament Management System",
+  icons: {
+    icon: '/flying-feathers-logo.png',
+    shortcut: '/flying-feathers-logo.png',
+    apple: '/flying-feathers-logo.png',
+  },
+  openGraph: {
+    title: "Flying Feathers",
+    description: "Flying Feathers Badminton Club - Tournament Management System",
+    images: ['/flying-feathers-logo.png'],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: "Flying Feathers",
+    description: "Flying Feathers Badminton Club - Tournament Management System",
+    images: ['/flying-feathers-logo.png'],
+  },
 };
 
 export default function RootLayout({
