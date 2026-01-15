@@ -21,8 +21,8 @@ function verifyToken(request: NextRequest) {
   }
 }
 
-// Generate round-robin matches with maximum court utilization using advanced scheduling
-function generateRoundRobinMatches(numberOfTeams: number, numberOfCourts: number) {
+// Generate court-based round-robin matches with maximum court utilization
+function generateCourtBasedMatches(numberOfTeams: number, numberOfCourts: number) {
   // First, generate all possible pairs (round-robin)
   const allMatches = [];
   for (let i = 0; i < numberOfTeams; i++) {
@@ -34,9 +34,6 @@ function generateRoundRobinMatches(numberOfTeams: number, numberOfCourts: number
       });
     }
   }
-
-  // Calculate theoretical minimum time slots
-  const theoreticalMinimumSlots = Math.ceil(allMatches.length / numberOfCourts);
 
   // Enhanced scheduling algorithm using maximum independent set approach
   const scheduledMatches = [];
@@ -60,7 +57,6 @@ function generateRoundRobinMatches(numberOfTeams: number, numberOfCourts: number
       if (availableMatches.length === 0) break;
       
       // Sort by priority: matches involving teams with the most remaining matches
-      // This helps balance the schedule
       availableMatches.sort((a, b) => {
         const aRemainingMatches = unscheduledMatches.filter(m => 
           m.team1Index === a.team1Index || m.team2Index === a.team1Index ||
@@ -71,7 +67,6 @@ function generateRoundRobinMatches(numberOfTeams: number, numberOfCourts: number
           m.team1Index === b.team2Index || m.team2Index === b.team2Index
         ).length;
         
-        // Try teams with MORE remaining matches first to spread the load
         return bRemainingMatches - aRemainingMatches;
       });
       
@@ -93,18 +88,102 @@ function generateRoundRobinMatches(numberOfTeams: number, numberOfCourts: number
         );
         if (index !== -1) {
           unscheduledMatches.splice(index, 1);
-          continueSearching = true; // Continue looking for more matches
+          continueSearching = true;
         }
       }
     }
 
-    // Add all matches from this time slot to the final schedule
     scheduledMatches.push(...matchesThisSlot);
-    
     currentTimeSlot++;
     
-    // Safety check to prevent infinite loops
+    // Safety check
     if (currentTimeSlot > 50) {
+      break;
+    }
+  }
+
+  return scheduledMatches;
+}
+
+// Generate multi-round robin matches ensuring no consecutive same opponents
+function generateMultiRoundRobinMatches(numberOfTeams: number, roundsPerOpponent: number) {
+  // Generate all possible pairs
+  const basePairs = [];
+  for (let i = 0; i < numberOfTeams; i++) {
+    for (let j = i + 1; j < numberOfTeams; j++) {
+      basePairs.push({ team1Index: i, team2Index: j });
+    }
+  }
+
+  // Create all matches (all pairs × rounds)
+  const allMatches = [];
+  for (let round = 0; round < roundsPerOpponent; round++) {
+    for (const pair of basePairs) {
+      allMatches.push({
+        ...pair,
+        round,
+        status: 'scheduled' as const
+      });
+    }
+  }
+
+  // Schedule matches ensuring no team plays same opponent consecutively
+  const scheduledMatches = [];
+  const unscheduledMatches = [...allMatches];
+  let currentTimeSlot = 1;
+  const lastOpponent: { [teamIndex: number]: number | null } = {};
+
+  // Initialize last opponent tracking
+  for (let i = 0; i < numberOfTeams; i++) {
+    lastOpponent[i] = null;
+  }
+
+  while (unscheduledMatches.length > 0) {
+    // Find a match where neither team played their current opponent in the previous time slot
+    let selectedMatch = null;
+    
+    for (const match of unscheduledMatches) {
+      const { team1Index, team2Index } = match;
+      
+      // Check if this pair can play now (not the same opponent as last time slot)
+      if (lastOpponent[team1Index] !== team2Index && lastOpponent[team2Index] !== team1Index) {
+        selectedMatch = match;
+        break;
+      }
+    }
+
+    // If no valid match found with the constraint, relax it and take any available match
+    if (!selectedMatch && unscheduledMatches.length > 0) {
+      selectedMatch = unscheduledMatches[0];
+    }
+
+    if (selectedMatch) {
+      scheduledMatches.push({
+        ...selectedMatch,
+        timeSlot: currentTimeSlot
+      });
+
+      // Update last opponent for both teams
+      lastOpponent[selectedMatch.team1Index] = selectedMatch.team2Index;
+      lastOpponent[selectedMatch.team2Index] = selectedMatch.team1Index;
+
+      // Remove from unscheduled
+      const index = unscheduledMatches.findIndex(m => 
+        m.team1Index === selectedMatch.team1Index && 
+        m.team2Index === selectedMatch.team2Index &&
+        m.round === selectedMatch.round
+      );
+      if (index !== -1) {
+        unscheduledMatches.splice(index, 1);
+      }
+
+      currentTimeSlot++;
+    } else {
+      break; // Safety break
+    }
+
+    // Safety check
+    if (currentTimeSlot > 500) {
       break;
     }
   }
@@ -147,8 +226,17 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Generate matches with proper scheduling
-    const matches = generateRoundRobinMatches(tournament.numberOfTeams, tournament.numberOfCourts);
+    // Generate matches based on tournament format
+    let matches;
+    if (tournament.tournamentFormat === 'court-based') {
+      matches = generateCourtBasedMatches(tournament.numberOfTeams, tournament.numberOfCourts);
+    } else if (tournament.tournamentFormat === 'round-robin') {
+      matches = generateMultiRoundRobinMatches(tournament.numberOfTeams, tournament.roundsPerOpponent || 1);
+    } else {
+      return NextResponse.json({ 
+        error: 'Invalid tournament format' 
+      }, { status: 400 });
+    }
     
     // Calculate total time slots
     const maxTimeSlot = Math.max(...matches.map(match => match.timeSlot));

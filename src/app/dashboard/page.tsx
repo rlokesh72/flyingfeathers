@@ -40,7 +40,9 @@ interface Tournament {
   name: string;
   description?: string;
   numberOfTeams: number;
-  numberOfCourts: number;
+  tournamentFormat: 'court-based' | 'round-robin';
+  numberOfCourts?: number;
+  roundsPerOpponent?: number;
   teams: Array<{
     name: string;
     players: string[];
@@ -233,7 +235,9 @@ export default function DashboardPage() {
     name: string;
     description: string;
     numberOfTeams: number;
-    numberOfCourts: number;
+    tournamentFormat: 'court-based' | 'round-robin';
+    numberOfCourts?: number;
+    roundsPerOpponent?: number;
     scheduledDate: string;
   }) => {
     setLoading(true);
@@ -514,7 +518,9 @@ export default function DashboardPage() {
       name: '',
       description: '',
       numberOfTeams: 4,
+      tournamentFormat: 'court-based' as 'court-based' | 'round-robin',
       numberOfCourts: 2,
+      roundsPerOpponent: 2,
       scheduledDate: '',
     });
 
@@ -573,6 +579,38 @@ export default function DashboardPage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
+                Tournament Format
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, tournamentFormat: 'court-based'})}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    formData.tournamentFormat === 'court-based'
+                      ? 'border-cyan-500 bg-cyan-500/20 text-cyan-400'
+                      : 'border-slate-600 bg-slate-700 text-slate-300 hover:border-slate-500'
+                  }`}
+                >
+                  <div className="text-lg font-bold mb-1">🏸 Court-Based</div>
+                  <div className="text-xs">With court allocation</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, tournamentFormat: 'round-robin'})}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    formData.tournamentFormat === 'round-robin'
+                      ? 'border-purple-500 bg-purple-500/20 text-purple-400'
+                      : 'border-slate-600 bg-slate-700 text-slate-300 hover:border-slate-500'
+                  }`}
+                >
+                  <div className="text-lg font-bold mb-1">🔄 Round-Robin</div>
+                  <div className="text-xs">Multiple rounds</div>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Number of Teams
               </label>
               <div className="flex items-center gap-4">
@@ -603,37 +641,74 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Number of Courts
-              </label>
-              <div className="flex items-center gap-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFormData({...formData, numberOfCourts: Math.max(1, formData.numberOfCourts - 1)})}
-                  disabled={formData.numberOfCourts <= 1}
-                  className="border-pink-500 text-pink-400 hover:bg-pink-500 hover:text-white"
-                >
-                  -
-                </Button>
-                <div className="flex-1 text-center">
-                  <div className="text-2xl font-bold text-white">{formData.numberOfCourts}</div>
-                  <div className="text-sm text-slate-400">Courts</div>
+            {formData.tournamentFormat === 'court-based' ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Number of Courts
+                </label>
+                <div className="flex items-center gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFormData({...formData, numberOfCourts: Math.max(1, formData.numberOfCourts - 1)})}
+                    disabled={formData.numberOfCourts <= 1}
+                    className="border-pink-500 text-pink-400 hover:bg-pink-500 hover:text-white"
+                  >
+                    -
+                  </Button>
+                  <div className="flex-1 text-center">
+                    <div className="text-2xl font-bold text-white">{formData.numberOfCourts}</div>
+                    <div className="text-sm text-slate-400">Courts</div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFormData({...formData, numberOfCourts: Math.min(10, formData.numberOfCourts + 1)})}
+                    disabled={formData.numberOfCourts >= 10}
+                    className="border-pink-500 text-pink-400 hover:bg-pink-500 hover:text-white"
+                  >
+                    +
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFormData({...formData, numberOfCourts: Math.min(10, formData.numberOfCourts + 1)})}
-                  disabled={formData.numberOfCourts >= 10}
-                  className="border-pink-500 text-pink-400 hover:bg-pink-500 hover:text-white"
-                >
-                  +
-                </Button>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Rounds Per Opponent
+                </label>
+                <div className="flex items-center gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFormData({...formData, roundsPerOpponent: Math.max(1, formData.roundsPerOpponent - 1)})}
+                    disabled={formData.roundsPerOpponent <= 1}
+                    className="border-purple-500 text-purple-400 hover:bg-purple-500 hover:text-white"
+                  >
+                    -
+                  </Button>
+                  <div className="flex-1 text-center">
+                    <div className="text-2xl font-bold text-white">{formData.roundsPerOpponent}</div>
+                    <div className="text-sm text-slate-400">Rounds</div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFormData({...formData, roundsPerOpponent: Math.min(5, formData.roundsPerOpponent + 1)})}
+                    disabled={formData.roundsPerOpponent >= 5}
+                    className="border-purple-500 text-purple-400 hover:bg-purple-500 hover:text-white"
+                  >
+                    +
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  Each team will play every other team {formData.roundsPerOpponent} time{formData.roundsPerOpponent > 1 ? 's' : ''}
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -980,7 +1055,7 @@ export default function DashboardPage() {
                   <Card key={match.index} className="bg-slate-700 border-slate-600">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg text-pink-400">
-                        Court {match.court}
+                        {match.court ? `Court ${match.court}` : `Match ${match.index + 1}`}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -1184,10 +1259,17 @@ export default function DashboardPage() {
                       <div className="text-2xl font-bold text-cyan-400">{selectedTournament.numberOfTeams}</div>
                       <div className="text-slate-400">Teams</div>
                     </div>
-                    <div>
-                      <div className="text-2xl font-bold text-pink-400">{selectedTournament.numberOfCourts}</div>
-                      <div className="text-slate-400">Courts</div>
-                    </div>
+                    {selectedTournament.tournamentFormat === 'court-based' ? (
+                      <div>
+                        <div className="text-2xl font-bold text-pink-400">{selectedTournament.numberOfCourts}</div>
+                        <div className="text-slate-400">Courts</div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-2xl font-bold text-purple-400">{selectedTournament.roundsPerOpponent}x</div>
+                        <div className="text-slate-400">Rounds</div>
+                      </div>
+                    )}
                     <div>
                       <div className="text-2xl font-bold text-purple-400">
                         {new Date(selectedTournament.scheduledDate).toLocaleDateString()}
@@ -1349,7 +1431,11 @@ export default function DashboardPage() {
                     Total Matches: <span className="text-cyan-400 font-bold">{selectedTournament.matches.length}</span>
                   </div>
                   <div className="text-sm text-slate-400">
-                    Each team plays {selectedTournament.numberOfTeams - 1} matches
+                    {selectedTournament.tournamentFormat === 'court-based' ? (
+                      <>Each team plays {selectedTournament.numberOfTeams - 1} matches</>
+                    ) : (
+                      <>Each team plays {(selectedTournament.numberOfTeams - 1) * (selectedTournament.roundsPerOpponent || 1)} matches ({selectedTournament.roundsPerOpponent}x per opponent)</>
+                    )}
                   </div>
                 </div>
                 <MatchSchedule tournament={selectedTournament} />
@@ -1370,8 +1456,11 @@ export default function DashboardPage() {
                       )}
                     </div>
                     <div className="text-sm text-slate-400">
-                      Tournament will generate {(selectedTournament.numberOfTeams * (selectedTournament.numberOfTeams - 1)) / 2} matches 
-                      across {selectedTournament.numberOfCourts} courts.
+                      {selectedTournament.tournamentFormat === 'court-based' ? (
+                        <>Tournament will generate {(selectedTournament.numberOfTeams * (selectedTournament.numberOfTeams - 1)) / 2} matches across {selectedTournament.numberOfCourts} courts.</>
+                      ) : (
+                        <>Tournament will generate {(selectedTournament.numberOfTeams * (selectedTournament.numberOfTeams - 1)) / 2 * (selectedTournament.roundsPerOpponent || 1)} total matches ({selectedTournament.roundsPerOpponent} rounds).</>
+                      )}
                     </div>
                     {!selectedTournament.teams.every(team => team.players.length === 2) && (
                       <div className="text-sm text-orange-400 mt-2">
@@ -1426,7 +1515,13 @@ export default function DashboardPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2 text-sm text-slate-300 mb-4">
-                        <div>Teams: {tournament.numberOfTeams} | Courts: {tournament.numberOfCourts}</div>
+                        <div className="font-semibold text-cyan-400 capitalize">{tournament.tournamentFormat.replace('-', ' ')} Format</div>
+                        <div>
+                          Teams: {tournament.numberOfTeams} | 
+                          {tournament.tournamentFormat === 'court-based' 
+                            ? ` Courts: ${tournament.numberOfCourts}` 
+                            : ` Rounds: ${tournament.roundsPerOpponent}x`}
+                        </div>
                         <div>Date: {new Date(tournament.scheduledDate).toLocaleDateString()}</div>
                         <div>Status: <span className={`capitalize font-semibold ${
                           tournament.status === 'completed' ? 'text-yellow-400' : 

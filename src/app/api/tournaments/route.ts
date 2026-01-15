@@ -70,11 +70,34 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
     
-    const { name, description, numberOfTeams, numberOfCourts, scheduledDate } = await request.json();
+    const { 
+      name, 
+      description, 
+      numberOfTeams, 
+      tournamentFormat,
+      numberOfCourts, 
+      roundsPerOpponent,
+      scheduledDate 
+    } = await request.json();
 
-    if (!name || !numberOfTeams || !numberOfCourts || !scheduledDate) {
+    if (!name || !numberOfTeams || !tournamentFormat || !scheduledDate) {
       return NextResponse.json(
-        { error: 'Name, number of teams, number of courts, and scheduled date are required' },
+        { error: 'Name, number of teams, tournament format, and scheduled date are required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate format-specific fields
+    if (tournamentFormat === 'court-based' && !numberOfCourts) {
+      return NextResponse.json(
+        { error: 'Number of courts is required for court-based tournaments' },
+        { status: 400 }
+      );
+    }
+
+    if (tournamentFormat === 'round-robin' && !roundsPerOpponent) {
+      return NextResponse.json(
+        { error: 'Rounds per opponent is required for round-robin tournaments' },
         { status: 400 }
       );
     }
@@ -85,17 +108,24 @@ export async function POST(request: NextRequest) {
       players: ['', ''], // Exactly 2 players per team
     }));
 
-    const tournamentData = {
+    const tournamentData: any = {
       name,
       description,
       numberOfTeams: Number(numberOfTeams),
-      numberOfCourts: Number(numberOfCourts),
+      tournamentFormat,
       teams,
       matches: [], // Initially empty, will be populated when tournament starts
       scheduledDate: new Date(scheduledDate),
       status: 'scheduled', // Explicitly set status
       createdBy: user.userId,
     };
+
+    // Add format-specific fields
+    if (tournamentFormat === 'court-based') {
+      tournamentData.numberOfCourts = Number(numberOfCourts);
+    } else if (tournamentFormat === 'round-robin') {
+      tournamentData.roundsPerOpponent = Number(roundsPerOpponent);
+    }
 
     const tournament = await Tournament.create(tournamentData);
     await tournament.populate('createdBy', 'name email');

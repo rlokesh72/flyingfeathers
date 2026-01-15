@@ -8,7 +8,7 @@ export interface ITeam {
 export interface IMatch {
   team1Index: number;
   team2Index: number;
-  court: number;
+  court?: number; // Optional for round-robin format
   timeSlot: number;
   team1Score?: number;
   team2Score?: number;
@@ -31,7 +31,9 @@ export interface ITournament extends mongoose.Document {
   name: string;
   description?: string;
   numberOfTeams: number;
-  numberOfCourts: number;
+  tournamentFormat: 'court-based' | 'round-robin';
+  numberOfCourts?: number; // Optional for court-based
+  roundsPerOpponent?: number; // Optional for round-robin
   teams: ITeam[];
   matches: IMatch[];
   scheduledDate: Date;
@@ -65,7 +67,7 @@ const MatchSchema = new mongoose.Schema({
   },
   court: {
     type: Number,
-    required: true,
+    required: false, // Optional for round-robin format
   },
   timeSlot: {
     type: Number,
@@ -102,11 +104,27 @@ const TournamentSchema = new mongoose.Schema({
     min: [2, 'Minimum 2 teams required'],
     max: [12, 'Maximum 12 teams allowed'],
   },
+  tournamentFormat: {
+    type: String,
+    enum: ['court-based', 'round-robin'],
+    default: 'court-based',
+    required: true,
+  },
   numberOfCourts: {
     type: Number,
-    required: [true, 'Number of courts is required'],
     min: [1, 'Minimum 1 court required'],
     max: [10, 'Maximum 10 courts allowed'],
+    required: function(this: any) {
+      return this.tournamentFormat === 'court-based';
+    },
+  },
+  roundsPerOpponent: {
+    type: Number,
+    min: [1, 'Minimum 1 round required'],
+    max: [5, 'Maximum 5 rounds allowed'],
+    required: function(this: any) {
+      return this.tournamentFormat === 'round-robin';
+    },
   },
   teams: [TeamSchema],
   matches: [MatchSchema],
