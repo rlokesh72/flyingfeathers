@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
 import Tournament from '@/models/Tournament';
 import User from '@/models/User';
+import { validateChampionshipConfig } from '@/lib/championship/utils';
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'your-jwt-secret-here-change-this-in-production';
 
@@ -70,61 +71,138 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
     
-    const { 
-      name, 
-      description, 
-      numberOfTeams, 
-      tournamentFormat,
-      numberOfCourts, 
-      roundsPerOpponent,
-      scheduledDate 
-    } = await request.json();
-
-    if (!name || !numberOfTeams || !tournamentFormat || !scheduledDate) {
-      return NextResponse.json(
-        { error: 'Name, number of teams, tournament format, and scheduled date are required' },
-        { status: 400 }
-      );
-    }
-
-    // Validate format-specific fields
-    if (tournamentFormat === 'court-based' && !numberOfCourts) {
-      return NextResponse.json(
-        { error: 'Number of courts is required for court-based tournaments' },
-        { status: 400 }
-      );
-    }
-
-    if (tournamentFormat === 'round-robin' && !roundsPerOpponent) {
-      return NextResponse.json(
-        { error: 'Rounds per opponent is required for round-robin tournaments' },
-        { status: 400 }
-      );
-    }
-
-    // Create tournament with teams having exactly 2 empty player slots
-    const teams = Array.from({ length: numberOfTeams }, (_, index) => ({
-      name: `Team ${index + 1}`,
-      players: ['', ''], // Exactly 2 players per team
-    }));
-
-    const tournamentData: any = {
+    const body = await request.json();
+    const {
       name,
       description,
-      numberOfTeams: Number(numberOfTeams),
+      numberOfTeams,
       tournamentFormat,
-      teams,
-      matches: [], // Initially empty, will be populated when tournament starts
-      scheduledDate: new Date(scheduledDate),
-      status: 'scheduled', // Explicitly set status
-      createdBy: user.userId,
-    };
+      numberOfCourts,
+      roundsPerOpponent,
+      scheduledDate,
+      // Championship-groups specific
+      maxTeams,
+      teamsPerGroup,
+      qualificationRules,
+    } = body;
 
-    // Add format-specific fields
+    if (!name || !tournamentFormat || !scheduledDate) {
+      return NextResponse.json(
+        { error: 'Name, tournament format, and scheduled date are required' },
+        { status: 400 }
+      );
+    }
+
+    let tournamentData: any;
+
     if (tournamentFormat === 'court-based') {
-      tournamentData.numberOfCourts = Number(numberOfCourts);
+      // ── existing court-based flow ─────────────────────────────────────
+      if (!numberOfTeams) {
+        return NextResponse.json(
+          { error: 'Number of teams is required for court-based tournaments' },
+          { status: 400 }
+        );
+      }
+      if (!numberOfCourts) {
+        return NextResponse.json(
+          { error: 'Number of courts is required for court-based tournaments' },
+          { status: 400 }
+        );
+      }
+      const teams = Array.from({ length: numberOfTeams }, (_, index) => ({
+        name: `Team ${index + 1}`,
+        players: ['', ''],
+      }));
+      tournamentData = {
+        name,
+        description,
+        numberOfTeams: Number(numberOfTeams),
+        tournamentFormat,
+        numberOfCourts: Number(numberOfCourts),
+        teams,
+        matches: [],
+        scheduledDate: new Date(scheduledDate),
+        status: 'scheduled',
+        createdBy: user.userId,
+      };
+
     } else if (tournamentFormat === 'round-robin') {
-      tournamentData.roundsPerOpponent = Number(roundsPerOpponent);
+      // ── existing round-robin flow ─────────────────────────────────────
+      if (!numberOfTeams) {
+        return NextResponse.json(
+          { error: 'Number of teams is required for round-robin tournaments' },
+          { status: 400 }
+        );
+      }
+      if (!roundsPerOpponent) {
+        return NextResponse.json(
+          { error: 'Rounds per opponent is required for round-robin tournaments' },
+          { status: 400 }
+        );
+      }
+      const teams = Array.from({ length: numberOfTeams }, (_, index) => ({
+        name: `Team ${index + 1}`,
+        players: ['', ''],
+      }));
+      tournamentData = {
+        name,
+        description,
+        numberOfTeams: Number(numberOfTeams),
+        tournamentFormat,
+        roundsPerOpponent: Number(roundsPerOpponent),
+        teams,
+        matches: [],
+        scheduledDate: new Date(scheduledDate),
+        status: 'scheduled',
+        createdBy: user.userId,
+      };
+
+    } else if (tournamentFormat === 'championship-groups') {
+      // ── new championship-groups flow ──────────────────────────────────
+      if (!maxTeams || !teamsPerGroup) {
+        return NextResponse.json(
+          { error: 'maxTeams and teamsPerGroup are required for championship-groups tournaments' },
+          { status: 400 }
+        );
+      }
+
+      const rules = qualificationRules ?? { gold: [1], silver: [2, 3], bronze: [4] };
+
+      const validation = validateChampionshipConfig({
+        maxTeams: Number(maxTeams),
+        teamsPerGroup: Number(teamsPerGroup),
+        qualificationRules: rules,
+      });
+
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: 'Invalid championship configuration', details: validation.errors },
+          { status: 400 }
+        );
+      }
+
+      const numberOfGroups = Number(maxTeams) / Number(teamsPerGroup);
+
+      tournamentData = {
+        name,
+        description,
+        numberOfTeams: 0,           // starts at 0, grows as teams are accepted
+        tournamentFormat,
+        maxTeams: Number(maxTeams),
+        teamsPerGroup: Number(teamsPerGroup),
+        numberOfGroups,
+        qualificationRules: rules,
+        championshipStatus: 'draft',
+        teams: [],
+        matches: [],
+        registrations: [],
+        scheduledDate: new Date(scheduledDate),
+        status: 'confirmed',        // no separate confirm step for championship-groups
+        createdBy: user.userId,
+      };
+
+    } else {
+      return NextResponse.json({ error: 'Invalid tournament format' }, { status: 400 });
     }
 
     const tournament = await Tournament.create(tournamentData);

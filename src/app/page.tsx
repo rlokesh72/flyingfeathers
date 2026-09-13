@@ -63,7 +63,7 @@ export default function Home() {
   const badges = [
     { Icon: Medal,         label: 'Sports Enthusiast'           },
     { Icon: MapPin,        label: 'Edinburgh Based'             },
-    { Icon: GraduationCap, label: 'Empowering Indian Communities Through Sport' },
+    { Icon: GraduationCap, label: 'Empowering Sports in Scotland' },
   ];
 
   return (
@@ -108,8 +108,15 @@ export default function Home() {
           <div className="flex flex-wrap gap-4 justify-center">
             <Button
               size="lg"
-              onClick={() => router.push('/schedules')}
+              onClick={() => router.push('/player/login')}
               className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white border-0 px-8 py-6 text-base font-semibold shadow-lg shadow-cyan-500/25 transition-all duration-300"
+            >
+              Player Login
+            </Button>
+            <Button
+              size="lg"
+              onClick={() => router.push('/schedules')}
+              className="bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-white px-8 py-6 text-base font-semibold transition-all duration-300"
             >
               View Tournaments
             </Button>

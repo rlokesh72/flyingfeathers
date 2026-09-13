@@ -8,11 +8,16 @@ export interface ITeam {
 export interface IMatch {
   team1Index: number;
   team2Index: number;
-  court?: number; // Optional for round-robin format
+  court?: number;
   timeSlot: number;
   team1Score?: number;
   team2Score?: number;
   status: 'scheduled' | 'in-progress' | 'completed';
+  // Championship-groups extra fields
+  phase?: 'group' | 'gold_knockout' | 'silver_knockout' | 'bronze_knockout';
+  groupIndex?: number;
+  bracketMatchId?: string;
+  round?: string;
 }
 
 export interface ITeamStats {
@@ -27,13 +32,83 @@ export interface ITeamStats {
   matchesPlayed: number;
 }
 
+export interface IRegistration {
+  _id: mongoose.Types.ObjectId;
+  teamName: string;
+  players: string[];          // kept for backward compat; derived from player1Name + player2Name
+  contactEmail: string;
+  contactPhone?: string;
+  status: 'pending' | 'accepted' | 'waitlisted' | 'rejected' | 'withdrawn';
+  appliedAt: Date;
+  reviewedAt?: Date;
+  notes?: string;
+  // Player portal linking
+  player1SupabaseId?: string;
+  player1Name?: string;
+  player1Email?: string;
+  player2SupabaseId?: string;
+  player2Name?: string;
+  player2Email?: string;
+  partnerStatus?: 'none' | 'requested' | 'confirmed';
+  inviteToken?: string;
+  inviteTokenExpiry?: Date;
+}
+
+export interface IGroup {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  sequence: number;
+  teamIndices: number[];
+}
+
+export interface IQualificationEntry {
+  groupId: mongoose.Types.ObjectId;
+  groupName: string;
+  rank: number;
+  teamIndex: number;
+  teamName: string;
+  championship: 'gold' | 'silver' | 'bronze';
+}
+
+export interface IBracketMatch {
+  _id: mongoose.Types.ObjectId;
+  championship: 'gold' | 'silver' | 'bronze';
+  round: 'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final';
+  sequence: number;
+  team1Index?: number;
+  team2Index?: number;
+  team1Score?: number;
+  team2Score?: number;
+  winnerIndex?: number;
+  status: 'scheduled' | 'in-progress' | 'completed';
+  nextMatchId?: mongoose.Types.ObjectId;
+  nextSlot?: 1 | 2;
+  court?: number;
+  timeSlot?: number;
+  matchIndex?: number;
+}
+
 export interface ITournament extends mongoose.Document {
   name: string;
   description?: string;
   numberOfTeams: number;
-  tournamentFormat: 'court-based' | 'round-robin';
-  numberOfCourts?: number; // Optional for court-based
-  roundsPerOpponent?: number; // Optional for round-robin
+  tournamentFormat: 'court-based' | 'round-robin' | 'championship-groups';
+  numberOfCourts?: number;
+  roundsPerOpponent?: number;
+  // Championship-groups specific
+  maxTeams?: number;
+  teamsPerGroup?: number;
+  numberOfGroups?: number;
+  qualificationRules?: {
+    gold: number[];
+    silver: number[];
+    bronze: number[];
+  };
+  championshipStatus?: string;
+  registrations?: IRegistration[];
+  groups?: IGroup[];
+  qualificationSnapshot?: IQualificationEntry[];
+  bracketMatches?: IBracketMatch[];
   teams: ITeam[];
   matches: IMatch[];
   scheduledDate: Date;
@@ -67,7 +142,7 @@ const MatchSchema = new mongoose.Schema({
   },
   court: {
     type: Number,
-    required: false, // Optional for round-robin format
+    required: false,
   },
   timeSlot: {
     type: Number,
@@ -86,6 +161,93 @@ const MatchSchema = new mongoose.Schema({
     enum: ['scheduled', 'in-progress', 'completed'],
     default: 'scheduled',
   },
+  // Championship-groups extra fields
+  phase: {
+    type: String,
+    enum: ['group', 'gold_knockout', 'silver_knockout', 'bronze_knockout'],
+    required: false,
+  },
+  groupIndex: {
+    type: Number,
+    required: false,
+  },
+  bracketMatchId: {
+    type: String,
+    required: false,
+  },
+  round: {
+    type: String,
+    required: false,
+  },
+});
+
+const RegistrationSchema = new mongoose.Schema({
+  teamName: { type: String, required: true, trim: true },
+  players: [{ type: String, trim: true }],
+  contactEmail: { type: String, required: true, trim: true },
+  contactPhone: { type: String, trim: true },
+  status: {
+    type: String,
+    enum: ['pending', 'accepted', 'waitlisted', 'rejected', 'withdrawn'],
+    default: 'pending',
+  },
+  appliedAt: { type: Date, default: Date.now },
+  reviewedAt: { type: Date },
+  notes: { type: String, trim: true },
+  // Player portal fields
+  player1SupabaseId: { type: String },
+  player1Name: { type: String, trim: true },
+  player1Email: { type: String, trim: true },
+  player2SupabaseId: { type: String },
+  player2Name: { type: String, trim: true },
+  player2Email: { type: String, trim: true },
+  partnerStatus: {
+    type: String,
+    enum: ['none', 'requested', 'confirmed'],
+    default: 'none',
+  },
+  inviteToken: { type: String },          // one-time token for email accept/decline
+  inviteTokenExpiry: { type: Date },
+});
+
+const GroupSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  sequence: { type: Number, required: true },
+  teamIndices: [{ type: Number }],
+});
+
+const QualificationEntrySchema = new mongoose.Schema({
+  groupId: { type: mongoose.Schema.Types.ObjectId },
+  groupName: { type: String },
+  rank: { type: Number },
+  teamIndex: { type: Number },
+  teamName: { type: String },
+  championship: { type: String, enum: ['gold', 'silver', 'bronze'] },
+});
+
+const BracketMatchSchema = new mongoose.Schema({
+  championship: { type: String, enum: ['gold', 'silver', 'bronze'], required: true },
+  round: {
+    type: String,
+    enum: ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'final'],
+    required: true,
+  },
+  sequence: { type: Number, required: true },
+  team1Index: { type: Number },
+  team2Index: { type: Number },
+  team1Score: { type: Number, min: 0 },
+  team2Score: { type: Number, min: 0 },
+  winnerIndex: { type: Number },
+  status: {
+    type: String,
+    enum: ['scheduled', 'in-progress', 'completed'],
+    default: 'scheduled',
+  },
+  nextMatchId: { type: mongoose.Schema.Types.ObjectId },
+  nextSlot: { type: Number, enum: [1, 2] },
+  court: { type: Number },
+  timeSlot: { type: Number },
+  matchIndex: { type: Number },
 });
 
 const TournamentSchema = new mongoose.Schema({
@@ -101,12 +263,12 @@ const TournamentSchema = new mongoose.Schema({
   numberOfTeams: {
     type: Number,
     required: [true, 'Number of teams is required'],
-    min: [2, 'Minimum 2 teams required'],
-    max: [12, 'Maximum 12 teams allowed'],
+    min: [0, 'Minimum 0 teams'],
+    max: [512, 'Maximum 512 teams allowed'],
   },
   tournamentFormat: {
     type: String,
-    enum: ['court-based', 'round-robin'],
+    enum: ['court-based', 'round-robin', 'championship-groups'],
     default: 'court-based',
     required: true,
   },
@@ -126,6 +288,23 @@ const TournamentSchema = new mongoose.Schema({
       return this.tournamentFormat === 'round-robin';
     },
   },
+  // Championship-groups specific fields
+  maxTeams: { type: Number, required: false },
+  teamsPerGroup: { type: Number, required: false },
+  numberOfGroups: { type: Number, required: false },
+  qualificationRules: {
+    type: {
+      gold: [Number],
+      silver: [Number],
+      bronze: [Number],
+    },
+    required: false,
+  },
+  championshipStatus: { type: String, required: false },
+  registrations: { type: [RegistrationSchema], required: false, default: undefined },
+  groups: { type: [GroupSchema], required: false, default: undefined },
+  qualificationSnapshot: { type: [QualificationEntrySchema], required: false, default: undefined },
+  bracketMatches: { type: [BracketMatchSchema], required: false, default: undefined },
   teams: [TeamSchema],
   matches: [MatchSchema],
   scheduledDate: {
@@ -162,4 +341,4 @@ if (mongoose.models.Tournament) {
   delete mongoose.models.Tournament;
 }
 
-export default mongoose.model<ITournament>('Tournament', TournamentSchema); 
+export default mongoose.model<ITournament>('Tournament', TournamentSchema);

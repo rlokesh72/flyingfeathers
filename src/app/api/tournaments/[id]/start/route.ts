@@ -229,7 +229,7 @@ export async function POST(
     // Generate matches based on tournament format
     let matches;
     if (tournament.tournamentFormat === 'court-based') {
-      matches = generateCourtBasedMatches(tournament.numberOfTeams, tournament.numberOfCourts);
+      matches = generateCourtBasedMatches(tournament.numberOfTeams, tournament.numberOfCourts ?? 2);
     } else if (tournament.tournamentFormat === 'round-robin') {
       matches = generateMultiRoundRobinMatches(tournament.numberOfTeams, tournament.roundsPerOpponent || 1);
     } else {
@@ -239,10 +239,10 @@ export async function POST(
     }
     
     // Calculate total time slots
-    const maxTimeSlot = Math.max(...matches.map(match => match.timeSlot));
+    const maxTimeSlot = Math.max(...matches.map((match: any) => match.timeSlot));
     
     // Update tournament
-    tournament.matches = matches;
+    tournament.matches = matches as any;
     tournament.status = 'in-progress';
     await tournament.save();
 
