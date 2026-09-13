@@ -12,6 +12,9 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const supabase = createClient();
 
+  // The page the player should land on after a successful login
+  const redirectTo = searchParams.get('redirect') || '';
+
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,20 +28,42 @@ function LoginForm() {
     if (searchParams.get('error') === 'auth_failed') {
       setError('Authentication failed. Please try again.');
     }
-    // Redirect if already logged in
+    // If already logged in, honour the redirect or fall back to portal
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.push('/player/portal');
+      if (session) router.push(redirectTo || '/player/portal');
     });
   }, []);
+
+  /* ── Helpers ──────────────────────────────────────────────────── */
+
+  /** Navigate to the right place after a successful login. */
+  const afterLogin = async (userId: string) => {
+    const res = await fetch(`/api/player/profile?supabaseId=${userId}`);
+    if (res.ok) {
+      const profile = await res.json();
+      if (!profile?.onboardingCompleted) {
+        // Stash redirect so onboarding can forward to it afterwards
+        const dest = redirectTo ? `/player/onboarding?redirect=${encodeURIComponent(redirectTo)}` : '/player/onboarding';
+        router.push(dest);
+      } else {
+        router.push(redirectTo || '/player/portal');
+      }
+    } else {
+      const dest = redirectTo ? `/player/onboarding?redirect=${encodeURIComponent(redirectTo)}` : '/player/onboarding';
+      router.push(dest);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     setError('');
+    // Pass the redirect destination through the OAuth state via the callback URL
+    const callbackUrl = redirectTo
+      ? `${window.location.origin}/api/auth/callback?redirect=${encodeURIComponent(redirectTo)}`
+      : `${window.location.origin}/api/auth/callback`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
-      },
+      options: { redirectTo: callbackUrl },
     });
     if (error) {
       setError(error.message);
@@ -59,8 +84,12 @@ function LoginForm() {
         setLoading(false);
         return;
       }
-      // Email confirmation is required — ask the user to verify before logging in
-      setSuccessMsg('Account created! Please check your email and click the confirmation link, then log in here.');
+      // Email confirmation required — preserve the redirect in the success banner
+      setSuccessMsg(
+        redirectTo
+          ? 'Account created! Check your email to confirm, then log in here to continue your registration.'
+          : 'Account created! Please check your email and click the confirmation link, then log in here.'
+      );
       setMode('login');
       setLoading(false);
       return;
@@ -69,14 +98,8 @@ function LoginForm() {
       if (error) {
         setError(error.message);
       } else if (data.session) {
-        // Check onboarding status
-        const res = await fetch(`/api/player/profile?supabaseId=${data.user.id}`);
-        if (res.ok) {
-          const profile = await res.json();
-          router.push(profile?.onboardingCompleted ? '/player/portal' : '/player/onboarding');
-        } else {
-          router.push('/player/onboarding');
-        }
+        await afterLogin(data.user.id);
+        return; // afterLogin handles navigation
       }
     }
     setLoading(false);
@@ -94,7 +117,9 @@ function LoginForm() {
             <Feather className="w-6 h-6 text-cyan-400" strokeWidth={1.5} />
           </div>
           <h1 className="text-2xl font-bold text-white">Flying Feathers</h1>
-          <p className="text-slate-400 text-sm mt-1">Player Portal</p>
+          <p className="text-slate-400 text-sm mt-1">
+            {redirectTo ? 'Log in to complete your registration' : 'Player Portal'}
+          </p>
         </div>
 
         {/* Card */}

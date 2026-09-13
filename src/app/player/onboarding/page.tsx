@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Feather, ChevronRight, ChevronLeft, User, Phone, Activity, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,17 @@ interface FormData {
 }
 
 export default function OnboardingPage() {
+  return (
+    <Suspense>
+      <OnboardingForm />
+    </Suspense>
+  );
+}
+
+function OnboardingForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '';
   const supabase = createClient();
 
   const [step, setStep] = useState(1);
@@ -92,7 +102,7 @@ export default function OnboardingPage() {
         }),
       });
       if (!res.ok) throw new Error('Failed to save profile');
-      router.push('/player/portal');
+      router.push(redirectTo || '/player/portal');
     } catch (e: any) {
       setError(e.message ?? 'Something went wrong');
     } finally {

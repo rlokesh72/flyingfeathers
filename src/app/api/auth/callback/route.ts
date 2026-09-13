@@ -5,8 +5,9 @@ import Player from '@/models/Player';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/player/portal';
+  const code     = searchParams.get('code');
+  // ?redirect= is forwarded from the login page via the OAuth redirectTo URL
+  const redirect = searchParams.get('redirect') ?? '';
 
   if (code) {
     const supabase = await createClient();
@@ -16,18 +17,26 @@ export async function GET(request: NextRequest) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         try {
-          // Query MongoDB directly — no self-referential HTTP fetch
           await connectDB();
           const player = await Player.findOne({ supabaseId: user.id });
           if (!player || !player.onboardingCompleted) {
-            return NextResponse.redirect(`${origin}/player/onboarding`);
+            // Not onboarded yet — send to onboarding, preserving the intended redirect
+            const dest = redirect
+              ? `/player/onboarding?redirect=${encodeURIComponent(redirect)}`
+              : '/player/onboarding';
+            return NextResponse.redirect(`${origin}${dest}`);
           }
         } catch {
-          // If DB unavailable, send to onboarding — it will handle the redirect
-          return NextResponse.redirect(`${origin}/player/onboarding`);
+          const dest = redirect
+            ? `/player/onboarding?redirect=${encodeURIComponent(redirect)}`
+            : '/player/onboarding';
+          return NextResponse.redirect(`${origin}${dest}`);
         }
       }
-      return NextResponse.redirect(`${origin}${next}`);
+
+      // Onboarding complete — go to the intended destination or portal
+      const dest = redirect || '/player/portal';
+      return NextResponse.redirect(`${origin}${dest}`);
     }
   }
 

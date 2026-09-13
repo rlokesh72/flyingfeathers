@@ -188,6 +188,37 @@ function ConfirmModal({
   );
 }
 
+/* ── Share invite link button ───────────────────────────────────────────── */
+function ShareLinkButton({ tournamentId }: { tournamentId: string }) {
+  const [copied, setCopied] = useState(false);
+  const link = typeof window !== 'undefined'
+    ? `${window.location.origin}/player/tournaments/${tournamentId}`
+    : `/player/tournaments/${tournamentId}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback for browsers that block clipboard without HTTPS
+      window.prompt('Copy this registration link:', link);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold transition-all duration-200
+        ${copied
+          ? 'bg-green-500/20 border-green-500/40 text-green-400'
+          : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20'}`}
+    >
+      {copied ? '✅ Link Copied!' : '🔗 Copy Invite Link'}
+    </button>
+  );
+}
+
 export default function TournamentsPage() {
   const [adminUser, setAdminUser] = useState<any>(null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -1928,6 +1959,9 @@ export default function TournamentsPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-2 justify-center">
+          {cs === 'registration_open' && (
+            <ShareLinkButton tournamentId={selectedTournament!._id} />
+          )}
           {cs === 'draft' && (
             <Button onClick={openRegistration} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white border-0">
               🟢 Open Registration
