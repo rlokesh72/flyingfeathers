@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Feather, Mail, Lock, Eye, EyeOff, Chrome } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-export default function PlayerLoginPage() {
+/* ── Inner component that uses useSearchParams ─────────────────────────── */
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -225,5 +226,14 @@ export default function PlayerLoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+/* ── Page export wrapped in Suspense (required for useSearchParams) ─────── */
+export default function PlayerLoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
