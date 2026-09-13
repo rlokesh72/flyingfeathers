@@ -78,7 +78,16 @@ function LoginForm() {
     setSuccessMsg('');
 
     if (mode === 'signup') {
-      const { error: signUpError } = await supabase.auth.signUp({ email, password });
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // Tell Supabase where to redirect after the user clicks the confirmation link
+          emailRedirectTo: redirectTo
+            ? `${window.location.origin}/api/auth/callback?redirect=${encodeURIComponent(redirectTo)}`
+            : `${window.location.origin}/api/auth/callback`,
+        },
+      });
       if (signUpError) {
         setError(signUpError.message);
         setLoading(false);
