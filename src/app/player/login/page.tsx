@@ -59,24 +59,11 @@ function LoginForm() {
         setLoading(false);
         return;
       }
-      // Auto sign-in immediately (works when email confirmation is disabled in Supabase)
-      const { error, data } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        // Confirmation still required — fall back to message
-        setSuccessMsg('Account created! Check your email to confirm, then log in.');
-        setLoading(false);
-        return;
-      }
-      if (data.session) {
-        const res = await fetch(`/api/player/profile?supabaseId=${data.user.id}`);
-        if (res.ok) {
-          const profile = await res.json();
-          router.push(profile?.onboardingCompleted ? '/player/portal' : '/player/onboarding');
-        } else {
-          router.push('/player/onboarding');
-        }
-        return;
-      }
+      // Email confirmation is required — ask the user to verify before logging in
+      setSuccessMsg('Account created! Please check your email and click the confirmation link, then log in here.');
+      setMode('login');
+      setLoading(false);
+      return;
     } else {
       const { error, data } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
