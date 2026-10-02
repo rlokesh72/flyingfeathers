@@ -2113,6 +2113,15 @@ export default function TournamentsPage() {
                           ) : reg.status === 'accepted' ? (
                             <button onClick={() => updateRegistrationStatus(reg._id, 'rejected')}
                               className="text-xs px-2 py-0.5 border border-red-600 text-red-400 hover:bg-red-900/20 rounded">Revoke</button>
+                          ) : reg.status === 'rejected' || reg.status === 'withdrawn' ? (
+                            <div className="flex gap-1">
+                              <button onClick={() => updateRegistrationStatus(reg._id, 'accepted')}
+                                className="text-xs px-2 py-0.5 bg-green-700 hover:bg-green-600 text-white rounded">Re-accept</button>
+                              {reg.status === 'rejected' && (
+                                <button onClick={() => updateRegistrationStatus(reg._id, 'waitlisted')}
+                                  className="text-xs px-2 py-0.5 bg-yellow-700 hover:bg-yellow-600 text-white rounded">Waitlist</button>
+                              )}
+                            </div>
                           ) : null}
                         </div>
                       </div>
