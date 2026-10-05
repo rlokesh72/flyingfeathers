@@ -36,6 +36,9 @@ export async function GET(
 
     const tournament = await Tournament.findById(id);
     if (!tournament) return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
+    if (isPublic && tournament.isSimulation) {
+      return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
+    }
 
     if (!tournament.bracketMatches || tournament.bracketMatches.length === 0) {
       return NextResponse.json({ gold: [], silver: [], bronze: [] });

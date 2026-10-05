@@ -11,6 +11,7 @@ export async function GET() {
 
     const tournaments = await Tournament.find({
       tournamentFormat: 'championship-groups',
+      isSimulation: { $ne: true },
       championshipStatus: { $in: ['registration_open', 'registration_closed', 'groups_generated', 'group_stage_active', 'group_stage_completed', 'knockouts_generated', 'knockouts_active', 'completed'] },
     })
       .select('name description scheduledDate maxTeams teamsPerGroup numberOfGroups championshipStatus qualificationRules registrations createdAt')

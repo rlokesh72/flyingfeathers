@@ -49,6 +49,7 @@ export async function POST(
     tournament.teams = acceptedRegs.map((reg: any) => ({
       name: reg.teamName,
       players: reg.players,
+      category: reg.category,
     }));
     tournament.numberOfTeams = acceptedRegs.length;
     tournament.championshipStatus = 'registration_closed';

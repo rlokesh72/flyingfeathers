@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import ChampionshipBracket from '../components/ChampionshipBracket';
+import GroupBuilder from '../components/GroupBuilder';
+import { championshipForRank, inferGroupCategory, resolveQualificationRules } from '@/lib/championship/qualification';
 
 interface Match {
   team1Index: number;
@@ -37,6 +39,7 @@ interface Registration {
   appliedAt: string;
   reviewedAt?: string;
   notes?: string;
+  category?: 'men' | 'women';
 }
 
 interface Group {
@@ -44,6 +47,7 @@ interface Group {
   name: string;
   sequence: number;
   teamIndices: number[];
+  category?: 'men' | 'women';
   standings?: TeamStats[];
 }
 
@@ -87,6 +91,7 @@ interface Tournament {
   teamsPerGroup?: number;
   numberOfGroups?: number;
   qualificationRules?: { gold: number[]; silver: number[]; bronze: number[] };
+  womenQualificationRules?: { gold: number[]; silver: number[]; bronze: number[] };
   championshipStatus?: string;
   registrations?: Registration[];
   groups?: Group[];
@@ -95,6 +100,7 @@ interface Tournament {
   teams: Array<{
     name: string;
     players: string[];
+    category?: 'men' | 'women';
   }>;
   matches: Match[];
   scheduledDate: string;
@@ -105,6 +111,8 @@ interface Tournament {
     email: string;
   };
   createdAt: string;
+  isSimulation?: boolean;
+  simulatedFrom?: string;
 }
 
 // Toast notification types
@@ -219,6 +227,89 @@ function ShareLinkButton({ tournamentId }: { tournamentId: string }) {
   );
 }
 
+function ManualTeamForm({
+  loading,
+  onAdd,
+}: {
+  loading: boolean;
+  onAdd: (team: {
+    teamName: string;
+    category: 'men' | 'women';
+    player1Name: string;
+    player1Email: string;
+    player2Name: string;
+    player2Email: string;
+  }) => Promise<boolean> | boolean;
+}) {
+  const [team, setTeam] = useState({
+    teamName: '',
+    category: 'men' as 'men' | 'women',
+    player1Name: '',
+    player1Email: '',
+    player2Name: '',
+    player2Email: '',
+  });
+
+  return (
+    <Card className="bg-slate-800 border-slate-700">
+      <CardContent className="pt-4 space-y-3">
+        <div className="text-white font-semibold">Add a team manually</div>
+        <p className="text-xs text-slate-400">Creates the team with both players and accepts it immediately.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input
+            value={team.teamName}
+            onChange={(e) => setTeam(prev => ({ ...prev, teamName: e.target.value }))}
+            placeholder="Team name (optional — auto-numbered if blank)"
+            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white"
+          />
+          <div className="flex gap-2 items-center">
+            <button type="button" onClick={() => setTeam(prev => ({ ...prev, category: 'men' }))}
+              className={`text-xs px-3 py-2 rounded border ${team.category === 'men' ? 'bg-blue-700 text-white border-blue-500' : 'border-blue-700/50 text-blue-300'}`}>Men</button>
+            <button type="button" onClick={() => setTeam(prev => ({ ...prev, category: 'women' }))}
+              className={`text-xs px-3 py-2 rounded border ${team.category === 'women' ? 'bg-pink-700 text-white border-pink-500' : 'border-pink-700/50 text-pink-300'}`}>Women</button>
+          </div>
+          <input
+            value={team.player1Name}
+            onChange={(e) => setTeam(prev => ({ ...prev, player1Name: e.target.value }))}
+            placeholder="Player 1 name *"
+            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white"
+          />
+          <input
+            value={team.player1Email}
+            onChange={(e) => setTeam(prev => ({ ...prev, player1Email: e.target.value }))}
+            placeholder="Player 1 email (optional)"
+            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white"
+          />
+          <input
+            value={team.player2Name}
+            onChange={(e) => setTeam(prev => ({ ...prev, player2Name: e.target.value }))}
+            placeholder="Player 2 name"
+            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white"
+          />
+          <input
+            value={team.player2Email}
+            onChange={(e) => setTeam(prev => ({ ...prev, player2Email: e.target.value }))}
+            placeholder="Player 2 email (optional)"
+            className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white"
+          />
+        </div>
+        <Button
+          onClick={async () => {
+            const ok = await onAdd(team);
+            if (ok) {
+              setTeam({ teamName: '', category: team.category, player1Name: '', player1Email: '', player2Name: '', player2Email: '' });
+            }
+          }}
+          disabled={loading}
+          className="bg-green-600 hover:bg-green-700 text-white border-0"
+        >
+          Add & accept team
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function TournamentsPage() {
   const [adminUser, setAdminUser] = useState<any>(null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -232,6 +323,9 @@ export default function TournamentsPage() {
   const [champTab, setChampTab] = useState<'overview' | 'registrations' | 'groups' | 'group-matches' | 'standings' | 'championships'>('overview');
   const [champSubTab, setChampSubTab] = useState<'gold' | 'silver' | 'bronze' | 'overall'>('gold');
   const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [editingRegId, setEditingRegId] = useState<string | null>(null);
+  const [editTeamName, setEditTeamName] = useState('');
+  const [regCategoryFilter, setRegCategoryFilter] = useState<'all' | 'men' | 'women'>('all');
   const [groups, setGroups] = useState<Group[]>([]);
   const [bracketData, setBracketData] = useState<{ gold: BracketMatchData[]; silver: BracketMatchData[]; bronze: BracketMatchData[] }>({ gold: [], silver: [], bronze: [] });
   const [loading, setLoading] = useState(false);
@@ -615,6 +709,118 @@ export default function TournamentsPage() {
     finally { setLoading(false); }
   };
 
+  const addManualTeam = async (team: {
+    teamName: string;
+    category: 'men' | 'women';
+    player1Name: string;
+    player1Email: string;
+    player2Name: string;
+    player2Email: string;
+  }) => {
+    if (!selectedTournament) return false;
+    if (!team.player1Name.trim()) {
+      showToast('Player 1 name is required', 'error');
+      return false;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/tournaments/${selectedTournament._id}/registrations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          adminCreate: true,
+          accept: true,
+          ...team,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchRegistrations(selectedTournament._id);
+        await refreshSelectedTournament();
+        showToast(data.message || 'Team added and accepted', 'success');
+        return true;
+      }
+      showToast(data.error || 'Failed to add team', 'error');
+      return false;
+    } catch {
+      showToast('Error adding team', 'error');
+      return false;
+    } finally { setLoading(false); }
+  };
+
+  const updateRegistrationCategory = async (regId: string, category: 'men' | 'women') => {
+    if (!selectedTournament) return;
+    try {
+      const res = await fetch(`/api/tournaments/${selectedTournament._id}/registrations/${regId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ category }),
+      });
+      if (res.ok) {
+        await fetchRegistrations(selectedTournament._id);
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Failed to set category', 'error');
+      }
+    } catch { showToast('Error updating category', 'error'); }
+  };
+
+  const renameRegistration = async (regId: string) => {
+    if (!selectedTournament) return;
+    const nextName = editTeamName.trim();
+    if (!nextName) {
+      showToast('Team name cannot be empty', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/tournaments/${selectedTournament._id}/registrations/${regId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ teamName: nextName }),
+      });
+      if (res.ok) {
+        await fetchRegistrations(selectedTournament._id);
+        setEditingRegId(null);
+        showToast('Team name updated', 'success');
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Failed to rename team', 'error');
+      }
+    } catch { showToast('Error renaming team', 'error'); }
+    finally { setLoading(false); }
+  };
+
+  const deleteRegistration = (reg: Registration) => {
+    if (!selectedTournament) return;
+    setConfirmModal({
+      isOpen: true,
+      title: `Delete ${reg.teamName}?`,
+      message: `This permanently removes ${reg.teamName} (${reg.players.join(', ') || 'no players'}) from the tournament. This cannot be undone.`,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setLoading(true);
+        try {
+          const res = await fetch(`/api/tournaments/${selectedTournament._id}/registrations/${reg._id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+          if (res.ok) {
+            await fetchRegistrations(selectedTournament._id);
+            showToast(`${reg.teamName} deleted`, 'success');
+          } else {
+            const err = await res.json();
+            showToast(err.error || 'Failed to delete team', 'error');
+          }
+        } catch { showToast('Error deleting team', 'error'); }
+        finally { setLoading(false); }
+      },
+    });
+  };
+
   const openRegistration = async () => {
     if (!selectedTournament) return;
     setLoading(true);
@@ -631,6 +837,35 @@ export default function TournamentsPage() {
       }
     } catch { showToast('Error', 'error'); }
     finally { setLoading(false); }
+  };
+
+  const simulateTournament = async () => {
+    if (!selectedTournament) return;
+    showConfirmation(
+      'Create test copy?',
+      `This creates a separate test tournament with the same players and groups as ${selectedTournament.name}. All scores start empty. Logging results there will not change the live tournament.`,
+      async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setLoading(true);
+        try {
+          const res = await fetch(`/api/tournaments/${selectedTournament._id}/simulate`, {
+            method: 'POST',
+            credentials: 'include',
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Failed to create test tournament');
+          setTournaments(prev => [data.tournament, ...prev]);
+          setSelectedTournament(data.tournament);
+          setChampTab('group-matches');
+          await fetchGroups(data.tournament._id);
+          showToast(`Test tournament ready — ${data.matchesAdded} empty group matches to log`, 'success');
+        } catch (e: any) {
+          showToast(e.message || 'Failed to create test tournament', 'error');
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
   };
 
   const closeRegistration = async () => {
@@ -1026,7 +1261,7 @@ export default function TournamentsPage() {
       })(),
       maxTeams: 32,
       teamsPerGroup: 4,
-      qualificationRules: { gold: [1], silver: [2, 3], bronze: [4] },
+      qualificationRules: { gold: [1], silver: [2, 3, 4], bronze: [5, 6] },
       numberOfCourts: 4,
     });
 
@@ -1149,36 +1384,33 @@ export default function TournamentsPage() {
                 </div>
               </div>
 
-              {wData.maxTeams % wData.teamsPerGroup === 0 ? (
-                <div className="p-4 bg-green-900/20 border border-green-700/40 rounded-lg">
-                  <div className="text-green-400 font-semibold text-lg">{numberOfGroups} Groups will be created</div>
-                  <div className="text-green-300 text-sm">{wData.maxTeams} teams ÷ {wData.teamsPerGroup} per group</div>
+              <div className="p-4 bg-slate-700/40 border border-slate-600 rounded-lg">
+                <div className="text-amber-300 font-semibold">You will arrange groups yourself</div>
+                <div className="text-slate-400 text-sm mt-1">
+                  After registration closes, drag teams into groups. Sizes can differ (for example some groups of 5 and some of 6).
+                  Suggested size: {wData.teamsPerGroup} teams per group.
                 </div>
-              ) : (
-                <div className="p-3 bg-red-900/20 border border-red-700/40 rounded-lg text-red-400 text-sm">
-                  ⚠️ {wData.maxTeams} is not divisible by {wData.teamsPerGroup}. Adjust maxTeams or teams per group.
-                </div>
-              )}
+              </div>
 
-              <div className="p-4 bg-slate-700/50 rounded-lg">
-                <div className="text-slate-300 font-semibold mb-2">Default Qualification Path</div>
-                <div className="space-y-1 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="text-yellow-400 font-bold">1st</span>
-                    <span className="text-slate-400">→</span>
-                    <span className="text-yellow-300">🥇 Gold ({numberOfGroups} teams)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-300 font-bold">2nd + 3rd</span>
-                    <span className="text-slate-400">→</span>
-                    <span className="text-slate-200">🥈 Silver ({numberOfGroups * 2} teams)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-orange-400 font-bold">4th</span>
-                    <span className="text-slate-400">→</span>
-                    <span className="text-orange-300">🥉 Bronze ({numberOfGroups} teams)</span>
+              <div className="p-4 bg-slate-700/50 rounded-lg space-y-3">
+                <div className="text-slate-300 font-semibold">Qualification Path</div>
+                <div>
+                  <div className="text-xs text-blue-300 mb-1">Men&apos;s groups</div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex items-center gap-2"><span className="text-yellow-400 font-bold">1st</span><span className="text-slate-400">→</span><span className="text-yellow-300">🥇 Gold</span></div>
+                    <div className="flex items-center gap-2"><span className="text-slate-300 font-bold">2nd + 3rd + 4th</span><span className="text-slate-400">→</span><span className="text-slate-200">🥈 Silver</span></div>
+                    <div className="flex items-center gap-2"><span className="text-orange-400 font-bold">5th + 6th</span><span className="text-slate-400">→</span><span className="text-orange-300">🥉 Bronze</span></div>
                   </div>
                 </div>
+                <div>
+                  <div className="text-xs text-pink-300 mb-1">Women&apos;s groups</div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex items-center gap-2"><span className="text-yellow-400 font-bold">1st + 2nd</span><span className="text-slate-400">→</span><span className="text-yellow-300">🥇 Gold</span></div>
+                    <div className="flex items-center gap-2"><span className="text-slate-300 font-bold">3rd + 4th</span><span className="text-slate-400">→</span><span className="text-slate-200">🥈 Silver</span></div>
+                    <div className="flex items-center gap-2"><span className="text-orange-400 font-bold">5th + 6th</span><span className="text-slate-400">→</span><span className="text-orange-300">🥉 Bronze</span></div>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">If a group has only 5 teams, there is no 6th place — only 5th goes to Bronze.</p>
               </div>
             </div>
           )}
@@ -1202,9 +1434,7 @@ export default function TournamentsPage() {
                 </div>
               ))}
 
-              {(goldCount === 0 || silverCount === 0 || bronzeCount === 0) && (
-                <div className="text-amber-400 text-sm">⚠️ Go back to Step 3 and ensure maxTeams is divisible by teamsPerGroup</div>
-              )}
+              <div className="text-slate-400 text-xs">Group count and knockout sizes are estimates. You will set the exact groups after registration closes.</div>
             </div>
           )}
 
@@ -1283,7 +1513,7 @@ export default function TournamentsPage() {
             ) : (
               <Button
                 type="button"
-                disabled={loading || !wData.name || wData.maxTeams % wData.teamsPerGroup !== 0}
+                disabled={loading || !wData.name}
                 onClick={handleSubmit}
                 className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white border-0"
               >
@@ -1638,7 +1868,16 @@ export default function TournamentsPage() {
           return (
             <div key={group._id}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-amber-400 font-semibold text-base">{group.name}</h3>
+                <h3 className="text-amber-400 font-semibold text-base">
+                  {group.name}
+                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded border align-middle ${
+                    inferGroupCategory(group) === 'women'
+                      ? 'bg-pink-900/40 text-pink-300 border-pink-700/40'
+                      : 'bg-blue-900/40 text-blue-300 border-blue-700/40'
+                  }`}>
+                    {inferGroupCategory(group) === 'women' ? 'Women' : 'Men'}
+                  </span>
+                </h3>
                 <span className="text-xs text-slate-400">{done}/{total} completed</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1649,16 +1888,14 @@ export default function TournamentsPage() {
                   const isDone = match.status === 'completed';
 
                   return (
-                    <Card key={match.index} className={`border transition-colors ${isDone ? 'bg-green-900/10 border-green-700/40' : isEditing ? 'bg-cyan-900/10 border-cyan-500/50' : 'bg-slate-800 border-slate-700'}`}>
-                      <CardContent className="py-3 px-4 space-y-2">
+                    <Card key={match.index} className={`overflow-hidden border transition-colors ${isDone ? 'bg-green-900/10 border-green-700/40' : isEditing ? 'bg-cyan-900/10 border-cyan-500/50' : 'bg-slate-800 border-slate-700'}`}>
+                      <CardContent className="p-4 space-y-3 overflow-hidden">
                         <div className="text-xs text-slate-500">Match #{match.index + 1}</div>
 
-                        {/* Score display / edit row */}
-                        <div className="flex items-center gap-2">
-                          {/* Team 1 */}
-                          <div className="flex-1 text-right">
-                            <p className="text-sm font-semibold text-white truncate">{t1}</p>
-                            <p className="text-xs text-slate-500 truncate">
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2">
+                          <div className="min-w-0 text-right">
+                            <p className="text-sm font-semibold text-white break-words">{t1}</p>
+                            <p className="text-xs text-slate-500 break-words">
                               {tournament.teams[match.team1Index]?.players?.join(' & ') ?? ''}
                             </p>
                             {isEditing ? (
@@ -1666,22 +1903,20 @@ export default function TournamentsPage() {
                                 type="number" min={0} max={30}
                                 value={scores.s1}
                                 onChange={(e) => setScores(s => ({ ...s, s1: clamp(e.target.value) }))}
-                                className="w-full mt-1 px-2 py-1.5 text-center text-lg font-bold bg-slate-700 border-2 border-cyan-500 rounded-lg text-white focus:outline-none"
+                                className="w-full max-w-full mt-1 px-2 py-1.5 text-center text-lg font-bold bg-slate-700 border-2 border-cyan-500 rounded-lg text-white focus:outline-none"
                               />
                             ) : (
-                              <p className={`text-xl font-bold text-right mt-1 ${isDone ? (match.team1Score > match.team2Score ? 'text-green-400' : 'text-slate-400') : 'text-slate-500'}`}>
+                              <p className={`text-xl font-bold mt-1 ${isDone ? (match.team1Score > match.team2Score ? 'text-green-400' : 'text-slate-400') : 'text-slate-500'}`}>
                                 {isDone ? match.team1Score : '—'}
                               </p>
                             )}
                           </div>
 
-                          {/* Divider */}
-                          <div className={`text-sm font-bold px-1 self-center ${isEditing ? 'text-cyan-400' : isDone ? 'text-slate-400' : 'text-slate-600'}`}>vs</div>
+                          <div className={`text-sm font-bold px-1 pt-1 shrink-0 ${isEditing ? 'text-cyan-400' : isDone ? 'text-slate-400' : 'text-slate-600'}`}>vs</div>
 
-                          {/* Team 2 */}
-                          <div className="flex-1 text-left">
-                            <p className="text-sm font-semibold text-white truncate">{t2}</p>
-                            <p className="text-xs text-slate-500 truncate">
+                          <div className="min-w-0 text-left">
+                            <p className="text-sm font-semibold text-white break-words">{t2}</p>
+                            <p className="text-xs text-slate-500 break-words">
                               {tournament.teams[match.team2Index]?.players?.join(' & ') ?? ''}
                             </p>
                             {isEditing ? (
@@ -1689,7 +1924,7 @@ export default function TournamentsPage() {
                                 type="number" min={0} max={30}
                                 value={scores.s2}
                                 onChange={(e) => setScores(s => ({ ...s, s2: clamp(e.target.value) }))}
-                                className="w-full mt-1 px-2 py-1.5 text-center text-lg font-bold bg-slate-700 border-2 border-cyan-500 rounded-lg text-white focus:outline-none"
+                                className="w-full max-w-full mt-1 px-2 py-1.5 text-center text-lg font-bold bg-slate-700 border-2 border-cyan-500 rounded-lg text-white focus:outline-none"
                               />
                             ) : (
                               <p className={`text-xl font-bold mt-1 ${isDone ? (match.team2Score > match.team1Score ? 'text-green-400' : 'text-slate-400') : 'text-slate-500'}`}>
@@ -1699,30 +1934,29 @@ export default function TournamentsPage() {
                           </div>
                         </div>
 
-                        {/* Action buttons */}
                         {isEditing ? (
-                          <div className="flex gap-2 pt-1">
+                          <div className="flex gap-2">
                             <Button size="sm"
                               onClick={() => { onSave(match.index, scores.s1, scores.s2); setEditing(null); }}
-                              className="flex-1 bg-green-600 hover:bg-green-700 text-white border-0 text-xs h-7">
+                              className="flex-1 min-w-0 bg-green-600 hover:bg-green-700 text-white border-0 text-xs h-8 whitespace-nowrap">
                               ✓ Save
                             </Button>
                             <Button size="sm" variant="outline"
                               onClick={() => setEditing(null)}
-                              className="flex-1 border-slate-600 text-slate-400 text-xs h-7">
+                              className="flex-1 min-w-0 border-slate-600 text-slate-400 text-xs h-8 whitespace-nowrap">
                               Cancel
                             </Button>
                           </div>
                         ) : isDone ? (
                           <button
                             onClick={() => startEdit(match.index, match)}
-                            className="w-full text-xs text-slate-500 hover:text-cyan-400 transition pt-1 text-center">
+                            className="w-full text-xs text-slate-500 hover:text-cyan-400 transition text-center whitespace-nowrap">
                             ✓ Completed · Edit
                           </button>
                         ) : (
                           <Button size="sm"
                             onClick={() => startEdit(match.index, match)}
-                            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white border-0 text-xs h-7 mt-1">
+                            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white border-0 text-xs h-8 whitespace-nowrap">
                             Log Score
                           </Button>
                         )}
@@ -1943,17 +2177,35 @@ export default function TournamentsPage() {
       .filter((m: any) => m.phase === 'group')
       .every((m: any) => m.status === 'completed');
 
+    const acceptedCount = registrations.filter(r => r.status === 'accepted').length;
+    const menCount = registrations.filter(r => r.status === 'accepted' && r.category === 'men').length;
+    const womenCount = registrations.filter(r => r.status === 'accepted' && r.category === 'women').length;
+    const arrangedGroups = tournament.groups?.length || 0;
+
     return (
       <div className="max-w-6xl mx-auto space-y-4">
         {/* Status Banner */}
-        <div className="p-3 bg-amber-900/20 border border-amber-700/40 rounded-lg flex items-center justify-between">
+        <div className={`p-3 border rounded-lg flex items-center justify-between ${
+          tournament.isSimulation
+            ? 'bg-cyan-900/20 border-cyan-700/40'
+            : 'bg-amber-900/20 border-amber-700/40'
+        }`}>
           <div>
-            <div className="text-amber-400 font-semibold">🏆 {tournament.name}</div>
-            <div className="text-slate-300 text-sm">{statusLabel[cs] ?? cs}</div>
+            <div className={`font-semibold ${tournament.isSimulation ? 'text-cyan-300' : 'text-amber-400'}`}>
+              {tournament.isSimulation ? '🧪 ' : '🏆 '}{tournament.name}
+            </div>
+            <div className="text-slate-300 text-sm">
+              {tournament.isSimulation ? 'Test copy — scores stay off the live tournament · ' : ''}
+              {statusLabel[cs] ?? cs}
+            </div>
           </div>
           <div className="text-right text-sm text-slate-400">
-            <div>{tournament.maxTeams} max teams · {tournament.teamsPerGroup}/group · {tournament.numberOfGroups} groups</div>
-            <div>{tournament.numberOfTeams} teams registered</div>
+            <div>{acceptedCount} / {tournament.maxTeams ?? '—'} accepted teams</div>
+            <div>
+              {arrangedGroups > 0 ? `${arrangedGroups} groups arranged` : 'Groups set by admin after registration'}
+              {' · '}Men: 1st Gold, 2–4 Silver, 5–6 Bronze · Women: 1–2 Gold, 3–4 Silver, 5–6 Bronze
+            </div>
+            <div>{menCount} men · {womenCount} women</div>
           </div>
         </div>
 
@@ -1973,8 +2225,8 @@ export default function TournamentsPage() {
             </Button>
           )}
           {cs === 'registration_closed' && (
-            <Button onClick={generateGroupsAction} disabled={loading} className="bg-purple-600 hover:bg-purple-700 text-white border-0">
-              📊 Generate Groups
+            <Button onClick={() => { setChampTab('groups'); fetchRegistrations(tournament._id); fetchGroups(tournament._id); }} disabled={loading} className="bg-purple-600 hover:bg-purple-700 text-white border-0">
+              📊 Arrange Groups
             </Button>
           )}
           {cs === 'group_stage_active' && allGroupMatchesComplete && (
@@ -1992,6 +2244,11 @@ export default function TournamentsPage() {
               🏆 Generate Championship Brackets
             </Button>
           )}
+          {!tournament.isSimulation && (
+            <Button onClick={simulateTournament} disabled={loading} className="bg-cyan-700 hover:bg-cyan-600 text-white border-0">
+              🧪 Simulate tournament
+            </Button>
+          )}
           <Button onClick={() => deleteTournament(tournament._id)} disabled={loading} variant="outline" size="sm"
             className="border-red-500 text-red-400 hover:bg-red-500 hover:text-white ml-auto">
             🗑️ Delete
@@ -2004,7 +2261,7 @@ export default function TournamentsPage() {
             <button key={tab} onClick={() => {
               setChampTab(tab);
               if (tab === 'registrations') fetchRegistrations(tournament._id);
-              if (tab === 'groups') fetchGroups(tournament._id);
+              if (tab === 'groups') { fetchGroups(tournament._id); fetchRegistrations(tournament._id); }
               if (tab === 'standings') fetchGroups(tournament._id);
               if (tab === 'championships') fetchBrackets(tournament._id);
             }}
@@ -2024,8 +2281,8 @@ export default function TournamentsPage() {
           <Card className="bg-slate-800 border-slate-700">
             <CardContent className="pt-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-4">
-                <div><div className="text-2xl font-bold text-amber-400">{tournament.numberOfTeams}</div><div className="text-slate-400 text-sm">Teams</div></div>
-                <div><div className="text-2xl font-bold text-purple-400">{tournament.numberOfGroups}</div><div className="text-slate-400 text-sm">Groups</div></div>
+                <div><div className="text-2xl font-bold text-amber-400">{acceptedCount}</div><div className="text-slate-400 text-sm">Accepted</div></div>
+                <div><div className="text-2xl font-bold text-purple-400">{arrangedGroups || '—'}</div><div className="text-slate-400 text-sm">Groups</div></div>
                 <div><div className="text-2xl font-bold text-cyan-400">{tournament.matches.filter((m: any) => m.phase === 'group').length}</div><div className="text-slate-400 text-sm">Group Matches</div></div>
                 <div><div className="text-2xl font-bold text-green-400">{tournament.matches.filter((m: any) => m.status === 'completed').length}</div><div className="text-slate-400 text-sm">Completed</div></div>
               </div>
@@ -2068,7 +2325,21 @@ export default function TournamentsPage() {
                   />
                 </div>
               </div>
+              <div className="flex gap-1">
+                {(['all', 'men', 'women'] as const).map(f => (
+                  <button key={f} onClick={() => setRegCategoryFilter(f)}
+                    className={`text-xs px-2 py-1 rounded capitalize ${
+                      regCategoryFilter === f ? 'bg-amber-600 text-white' : 'bg-slate-700 text-slate-300'
+                    }`}>
+                    {f}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {(cs === 'registration_open' || cs === 'registration_closed') && (
+              <ManualTeamForm loading={loading} onAdd={addManualTeam} />
+            )}
 
             {registrations.length === 0 ? (
               <Card className="bg-slate-800 border-slate-700">
@@ -2078,7 +2349,7 @@ export default function TournamentsPage() {
               </Card>
             ) : (
               <div className="space-y-3">
-                {registrations.map(reg => (
+                {registrations.filter(reg => regCategoryFilter === 'all' || reg.category === regCategoryFilter).map(reg => (
                   <Card key={reg._id} className={`border ${
                     reg.status === 'accepted' ? 'bg-green-900/10 border-green-700/40' :
                     reg.status === 'rejected' ? 'bg-red-900/10 border-red-700/40' :
@@ -2087,9 +2358,45 @@ export default function TournamentsPage() {
                   }`}>
                     <CardContent className="py-3 px-4">
                       <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="font-semibold text-white">{reg.teamName}</div>
+                        <div className="flex-1 min-w-0">
+                          {editingRegId === reg._id ? (
+                            <form
+                              className="flex items-center gap-2 mb-1"
+                              onSubmit={(e) => { e.preventDefault(); renameRegistration(reg._id); }}
+                            >
+                              <input
+                                value={editTeamName}
+                                onChange={(e) => setEditTeamName(e.target.value)}
+                                autoFocus
+                                className="flex-1 min-w-0 bg-slate-900 border border-cyan-500/50 rounded px-2 py-1 text-sm text-white focus:outline-none"
+                              />
+                              <button type="submit" disabled={loading}
+                                className="text-xs px-2 py-0.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded">Save</button>
+                              <button type="button" onClick={() => setEditingRegId(null)}
+                                className="text-xs px-2 py-0.5 border border-slate-600 text-slate-300 hover:bg-slate-700 rounded">Cancel</button>
+                            </form>
+                          ) : (
+                            <div className="font-semibold text-white">{reg.teamName}</div>
+                          )}
                           <div className="text-sm text-slate-400">{reg.players.join(', ')}</div>
+                          <div className="flex items-center gap-2 mt-2">
+                            <button
+                              onClick={() => updateRegistrationCategory(reg._id, 'men')}
+                              className={`text-[11px] px-2 py-0.5 rounded border ${
+                                reg.category === 'men'
+                                  ? 'bg-blue-700 text-white border-blue-500'
+                                  : 'border-blue-700/50 text-blue-300 hover:bg-blue-900/30'
+                              }`}
+                            >Men</button>
+                            <button
+                              onClick={() => updateRegistrationCategory(reg._id, 'women')}
+                              className={`text-[11px] px-2 py-0.5 rounded border ${
+                                reg.category === 'women'
+                                  ? 'bg-pink-700 text-white border-pink-500'
+                                  : 'border-pink-700/50 text-pink-300 hover:bg-pink-900/30'
+                              }`}
+                            >Women</button>
+                          </div>
                           <div className="text-xs text-slate-500 mt-1">{reg.contactEmail} · {new Date(reg.appliedAt).toLocaleDateString()}</div>
                         </div>
                         <div className="flex flex-col items-end gap-1">
@@ -2099,30 +2406,40 @@ export default function TournamentsPage() {
                             reg.status === 'waitlisted' ? 'bg-yellow-900/30 text-yellow-400 border-yellow-700/40' :
                             'bg-slate-700 text-slate-300 border-slate-600'
                           }`}>{reg.status}</span>
-                          {reg.status === 'pending' || reg.status === 'waitlisted' ? (
-                            <div className="flex gap-1">
-                              <button onClick={() => updateRegistrationStatus(reg._id, 'accepted')}
-                                className="text-xs px-2 py-0.5 bg-green-700 hover:bg-green-600 text-white rounded">Accept</button>
+                          <div className="flex flex-wrap justify-end gap-1">
+                            <button
+                              onClick={() => { setEditingRegId(reg._id); setEditTeamName(reg.teamName); }}
+                              className="text-xs px-2 py-0.5 border border-slate-500 text-slate-300 hover:bg-slate-700 rounded"
+                            >Rename</button>
+                            {(reg.status === 'accepted' || reg.status === 'rejected') && (
+                              <button onClick={() => deleteRegistration(reg)}
+                                className="text-xs px-2 py-0.5 border border-red-600 text-red-400 hover:bg-red-900/20 rounded">Delete</button>
+                            )}
+                            {reg.status === 'pending' || reg.status === 'waitlisted' ? (
+                              <>
+                                <button onClick={() => updateRegistrationStatus(reg._id, 'accepted')}
+                                  className="text-xs px-2 py-0.5 bg-green-700 hover:bg-green-600 text-white rounded">Accept</button>
+                                <button onClick={() => updateRegistrationStatus(reg._id, 'rejected')}
+                                  className="text-xs px-2 py-0.5 bg-red-700 hover:bg-red-600 text-white rounded">Reject</button>
+                                {reg.status !== 'waitlisted' && (
+                                  <button onClick={() => updateRegistrationStatus(reg._id, 'waitlisted')}
+                                    className="text-xs px-2 py-0.5 bg-yellow-700 hover:bg-yellow-600 text-white rounded">Waitlist</button>
+                                )}
+                              </>
+                            ) : reg.status === 'accepted' ? (
                               <button onClick={() => updateRegistrationStatus(reg._id, 'rejected')}
-                                className="text-xs px-2 py-0.5 bg-red-700 hover:bg-red-600 text-white rounded">Reject</button>
-                              {reg.status !== 'waitlisted' && (
-                                <button onClick={() => updateRegistrationStatus(reg._id, 'waitlisted')}
-                                  className="text-xs px-2 py-0.5 bg-yellow-700 hover:bg-yellow-600 text-white rounded">Waitlist</button>
-                              )}
-                            </div>
-                          ) : reg.status === 'accepted' ? (
-                            <button onClick={() => updateRegistrationStatus(reg._id, 'rejected')}
-                              className="text-xs px-2 py-0.5 border border-red-600 text-red-400 hover:bg-red-900/20 rounded">Revoke</button>
-                          ) : reg.status === 'rejected' || reg.status === 'withdrawn' ? (
-                            <div className="flex gap-1">
-                              <button onClick={() => updateRegistrationStatus(reg._id, 'accepted')}
-                                className="text-xs px-2 py-0.5 bg-green-700 hover:bg-green-600 text-white rounded">Re-accept</button>
-                              {reg.status === 'rejected' && (
-                                <button onClick={() => updateRegistrationStatus(reg._id, 'waitlisted')}
-                                  className="text-xs px-2 py-0.5 bg-yellow-700 hover:bg-yellow-600 text-white rounded">Waitlist</button>
-                              )}
-                            </div>
-                          ) : null}
+                                className="text-xs px-2 py-0.5 border border-red-600 text-red-400 hover:bg-red-900/20 rounded">Revoke</button>
+                            ) : reg.status === 'rejected' || reg.status === 'withdrawn' ? (
+                              <>
+                                <button onClick={() => updateRegistrationStatus(reg._id, 'accepted')}
+                                  className="text-xs px-2 py-0.5 bg-green-700 hover:bg-green-600 text-white rounded">Re-accept</button>
+                                {reg.status === 'rejected' && (
+                                  <button onClick={() => updateRegistrationStatus(reg._id, 'waitlisted')}
+                                    className="text-xs px-2 py-0.5 bg-yellow-700 hover:bg-yellow-600 text-white rounded">Waitlist</button>
+                                )}
+                              </>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -2134,17 +2451,43 @@ export default function TournamentsPage() {
         )}
 
         {/* ── Groups Tab ── */}
-        {champTab === 'groups' && (
+        {champTab === 'groups' && cs === 'registration_closed' && (
+          <GroupBuilder
+            tournamentId={tournament._id}
+            teams={tournament.teams.map(t => ({
+              ...t,
+              category: t.category || registrations.find(r => r.teamName === t.name)?.category,
+            }))}
+            initialGroups={tournament.groups?.map(g => ({ name: g.name, teamIndices: g.teamIndices, category: inferGroupCategory(g) }))}
+            onSaved={async () => { await refreshSelectedTournament(); await fetchGroups(tournament._id); }}
+            onConfirmed={async () => {
+              await refreshSelectedTournament();
+              await fetchGroups(tournament._id);
+              setChampTab('group-matches');
+              showToast('Groups confirmed and matches created', 'success');
+            }}
+          />
+        )}
+        {champTab === 'groups' && cs !== 'registration_closed' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {groups.length === 0 && (
               <div className="col-span-full text-center text-slate-400 py-8">
-                {cs === 'registration_closed' ? 'Click "Generate Groups" to create groups.' : 'Groups will appear here after they are generated.'}
+                Groups will appear here after they are confirmed.
               </div>
             )}
             {groups.map((group) => (
               <Card key={group._id} className="bg-slate-800 border-slate-700">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-amber-400 text-base">{group.name}</CardTitle>
+                  <CardTitle className="text-amber-400 text-base flex items-center gap-2">
+                    {group.name}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-normal ${
+                      inferGroupCategory(group) === 'women'
+                        ? 'bg-pink-900/40 text-pink-300 border-pink-700/40'
+                        : 'bg-blue-900/40 text-blue-300 border-blue-700/40'
+                    }`}>
+                      {inferGroupCategory(group) === 'women' ? 'Women' : 'Men'}
+                    </span>
+                  </CardTitle>
                   <CardDescription className="text-slate-400 text-xs">{group.teamIndices.length} teams</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -2156,6 +2499,10 @@ export default function TournamentsPage() {
                       wins: 0, losses: 0, matchesPlayed: 0, pointDifference: 0,
                     }))).map((stat: any, rank: number) => {
                       const qualEntry = tournament.qualificationSnapshot?.find(q => q.teamIndex === stat.teamIndex);
+                      const projected = !qualEntry && championshipForRank(
+                        rank + 1,
+                        resolveQualificationRules(group, tournament.qualificationRules, tournament.womenQualificationRules)
+                      );
                       return (
                         <div key={rank} className="flex items-center gap-2 text-sm py-1 border-b border-slate-700/40 last:border-0">
                           <span className="text-slate-500 w-4 shrink-0">{rank + 1}.</span>
@@ -2173,12 +2520,10 @@ export default function TournamentsPage() {
                               'bg-orange-900/30 text-orange-400'
                             }`}>{qualEntry.championship === 'gold' ? '🥇' : qualEntry.championship === 'silver' ? '🥈' : '🥉'}</span>
                           )}
-                          {!qualEntry && cs === 'group_stage_active' && (
-                            <span className="text-xs text-slate-600">{
-                              tournament.qualificationRules?.gold?.includes(rank + 1) ? '→🥇' :
-                              tournament.qualificationRules?.silver?.includes(rank + 1) ? '→🥈' :
-                              tournament.qualificationRules?.bronze?.includes(rank + 1) ? '→🥉' : ''
-                            }</span>
+                          {!qualEntry && cs === 'group_stage_active' && projected && (
+                            <span className="text-xs text-slate-600">
+                              {projected === 'gold' ? '→🥇' : projected === 'silver' ? '→🥈' : '→🥉'}
+                            </span>
                           )}
                         </div>
                       );
@@ -2207,7 +2552,16 @@ export default function TournamentsPage() {
             ) : groups.map((group) => (
               <Card key={group._id} className="bg-slate-800 border-slate-700">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-amber-400">{group.name}</CardTitle>
+                  <CardTitle className="text-amber-400 flex items-center gap-2">
+                    {group.name}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-normal ${
+                      inferGroupCategory(group) === 'women'
+                        ? 'bg-pink-900/40 text-pink-300 border-pink-700/40'
+                        : 'bg-blue-900/40 text-blue-300 border-blue-700/40'
+                    }`}>
+                      {inferGroupCategory(group) === 'women' ? 'Women' : 'Men'}
+                    </span>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <table className="w-full text-sm">
@@ -2221,10 +2575,9 @@ export default function TournamentsPage() {
                     <tbody>
                       {(group.standings ?? []).map((stat: any, rank: number) => {
                         const qualEntry = tournament.qualificationSnapshot?.find(q => q.teamIndex === stat.teamIndex);
-                        const projected = !qualEntry && (
-                          tournament.qualificationRules?.gold?.includes(rank + 1) ? 'gold' :
-                          tournament.qualificationRules?.silver?.includes(rank + 1) ? 'silver' :
-                          tournament.qualificationRules?.bronze?.includes(rank + 1) ? 'bronze' : null
+                        const projected = !qualEntry && championshipForRank(
+                          rank + 1,
+                          resolveQualificationRules(group, tournament.qualificationRules, tournament.womenQualificationRules)
                         );
                         return (
                           <tr key={rank} className="border-b border-slate-700/50">
@@ -2618,9 +2971,16 @@ export default function TournamentsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {tournaments.map((tournament) => (
-                <Card key={tournament._id} className="bg-slate-800 border-slate-700 hover:border-cyan-500 transition-colors cursor-pointer">
+                <Card key={tournament._id} className={`bg-slate-800 hover:border-cyan-500 transition-colors cursor-pointer ${
+                  tournament.isSimulation ? 'border-cyan-700/50' : 'border-slate-700'
+                }`}>
                   <CardHeader>
-                    <CardTitle className="text-cyan-400">{tournament.name}</CardTitle>
+                    <CardTitle className="text-cyan-400 flex items-start gap-2">
+                      <span className="min-w-0 break-words">{tournament.name}</span>
+                      {tournament.isSimulation && (
+                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border bg-cyan-900/40 text-cyan-300 border-cyan-700/40">TEST</span>
+                      )}
+                    </CardTitle>
                     <CardDescription className="text-slate-300">
                       {tournament.description || 'No description'}
                     </CardDescription>
@@ -2629,10 +2989,13 @@ export default function TournamentsPage() {
                     <div className="space-y-2 text-sm text-slate-300 mb-4">
                       <div className="font-semibold text-cyan-400 capitalize">{tournament.tournamentFormat.replace('-', ' ')} Format</div>
                       <div>
-                        Teams: {tournament.numberOfTeams} |
-                        {tournament.tournamentFormat === 'court-based'
-                          ? ` Courts: ${tournament.numberOfCourts}`
-                          : ` Rounds: ${tournament.roundsPerOpponent}x`}
+                        {tournament.tournamentFormat === 'championship-groups'
+                          ? `Accepted: ${tournament.registrations?.filter(r => r.status === 'accepted').length ?? tournament.numberOfTeams} / ${tournament.maxTeams ?? '—'}`
+                          : `Teams: ${tournament.numberOfTeams} | ${
+                              tournament.tournamentFormat === 'court-based'
+                                ? `Courts: ${tournament.numberOfCourts}`
+                                : `Rounds: ${tournament.roundsPerOpponent}x`
+                            }`}
                       </div>
                       <div>Date: {new Date(tournament.scheduledDate).toLocaleDateString()}</div>
                       <div>Status: <span className={`capitalize font-semibold ${
@@ -2653,6 +3016,10 @@ export default function TournamentsPage() {
                           setShowMatches(false);
                           setShowStandings(false);
                           setCurrentStandings([]);
+                          if (tournament.tournamentFormat === 'championship-groups') {
+                            fetchRegistrations(tournament._id);
+                            setChampTab('registrations');
+                          }
 
                           if (tournament.status === 'completed') {
                             setTimeout(() => {

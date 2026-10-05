@@ -4,6 +4,7 @@ import connectDB from '@/lib/mongodb';
 import Tournament from '@/models/Tournament';
 import User from '@/models/User';
 import { determineQualifiers } from '@/lib/championship/qualifiers';
+import { MEN_QUALIFICATION_RULES, WOMEN_QUALIFICATION_RULES } from '@/lib/championship/qualification';
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'your-jwt-secret-here-change-this-in-production';
 
@@ -55,17 +56,15 @@ export async function POST(
       );
     }
 
-    const qualificationRules = tournament.qualificationRules ?? {
-      gold: [1],
-      silver: [2, 3],
-      bronze: [4],
-    };
+    const qualificationRules = tournament.qualificationRules ?? MEN_QUALIFICATION_RULES;
+    const womenQualificationRules = tournament.womenQualificationRules ?? WOMEN_QUALIFICATION_RULES;
 
     const qualificationSnapshot = determineQualifiers(
       tournament.groups ?? [],
       tournament.teams,
       tournament.matches,
-      qualificationRules
+      qualificationRules,
+      womenQualificationRules
     );
 
     tournament.qualificationSnapshot = qualificationSnapshot as any;

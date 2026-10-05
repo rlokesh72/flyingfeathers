@@ -210,10 +210,19 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             ))}
           </div>
           {tournament.qualificationRules && (
-            <div className="mt-4 pt-4 border-t border-white/6 flex flex-wrap gap-4 text-xs text-slate-400">
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" /> Top teams → Gold</span>
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 inline-block" /> Mid teams → Silver</span>
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-700 inline-block" /> Lower teams → Bronze</span>
+            <div className="mt-4 pt-4 border-t border-white/6 space-y-2 text-xs text-slate-400">
+              <div className="flex flex-wrap gap-4">
+                <span className="text-blue-300">Men</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" /> 1st → Gold</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 inline-block" /> 2nd–4th → Silver</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-700 inline-block" /> 5th–6th → Bronze</span>
+              </div>
+              <div className="flex flex-wrap gap-4">
+                <span className="text-pink-300">Women</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" /> 1st–2nd → Gold</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 inline-block" /> 3rd–4th → Silver</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-700 inline-block" /> 5th–6th → Bronze</span>
+              </div>
             </div>
           )}
         </div>

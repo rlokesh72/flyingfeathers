@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 export interface ITeam {
   name: string;
   players: string[];
+  category?: 'men' | 'women';
 }
 
 export interface IMatch {
@@ -52,6 +53,7 @@ export interface IRegistration {
   partnerStatus?: 'none' | 'requested' | 'confirmed';
   inviteToken?: string;
   inviteTokenExpiry?: Date;
+  category?: 'men' | 'women';
 }
 
 export interface IGroup {
@@ -59,6 +61,7 @@ export interface IGroup {
   name: string;
   sequence: number;
   teamIndices: number[];
+  category?: 'men' | 'women';
 }
 
 export interface IQualificationEntry {
@@ -104,6 +107,11 @@ export interface ITournament extends mongoose.Document {
     silver: number[];
     bronze: number[];
   };
+  womenQualificationRules?: {
+    gold: number[];
+    silver: number[];
+    bronze: number[];
+  };
   championshipStatus?: string;
   registrations?: IRegistration[];
   groups?: IGroup[];
@@ -115,6 +123,8 @@ export interface ITournament extends mongoose.Document {
   status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed';
   standings?: ITeamStats[];
   createdBy: mongoose.Types.ObjectId;
+  isSimulation?: boolean;
+  simulatedFrom?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -129,6 +139,11 @@ const TeamSchema = new mongoose.Schema({
     type: String,
     trim: true,
   }],
+  category: {
+    type: String,
+    enum: ['men', 'women'],
+    required: false,
+  },
 });
 
 const MatchSchema = new mongoose.Schema({
@@ -208,12 +223,14 @@ const RegistrationSchema = new mongoose.Schema({
   },
   inviteToken: { type: String },          // one-time token for email accept/decline
   inviteTokenExpiry: { type: Date },
+  category: { type: String, enum: ['men', 'women'] },
 });
 
 const GroupSchema = new mongoose.Schema({
   name: { type: String, required: true },
   sequence: { type: Number, required: true },
   teamIndices: [{ type: Number }],
+  category: { type: String, enum: ['men', 'women'] },
 });
 
 const QualificationEntrySchema = new mongoose.Schema({
@@ -300,6 +317,14 @@ const TournamentSchema = new mongoose.Schema({
     },
     required: false,
   },
+  womenQualificationRules: {
+    type: {
+      gold: [Number],
+      silver: [Number],
+      bronze: [Number],
+    },
+    required: false,
+  },
   championshipStatus: { type: String, required: false },
   registrations: { type: [RegistrationSchema], required: false, default: undefined },
   groups: { type: [GroupSchema], required: false, default: undefined },
@@ -332,6 +357,8 @@ const TournamentSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  isSimulation: { type: Boolean, default: false },
+  simulatedFrom: { type: mongoose.Schema.Types.ObjectId, ref: 'Tournament' },
 }, {
   timestamps: true,
 });

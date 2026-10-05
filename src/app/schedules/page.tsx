@@ -3,14 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Feather, ArrowLeft, Trophy, Users, CalendarDays, ChevronRight, Swords, BarChart2, Medal } from 'lucide-react';
+import { championshipForRank, inferGroupCategory, resolveQualificationRules } from '@/lib/championship/qualification';
 
 /* ─── Types ────────────────────────────────────────────────── */
 interface TeamStat { teamIndex: number; teamName: string; players: string[]; wins: number; losses: number; pointsFor: number; pointsAgainst: number; pointDifference: number; matchesPlayed: number; }
-interface Group { _id: string; name: string; sequence: number; teamIndices: number[]; standings?: TeamStat[]; }
+interface Group { _id: string; name: string; sequence: number; teamIndices: number[]; category?: 'men'|'women'; standings?: TeamStat[]; }
 interface BracketMatch { _id: string; championship: 'gold'|'silver'|'bronze'; round: string; sequence: number; team1Index?: number; team2Index?: number; team1Score?: number; team2Score?: number; winnerIndex?: number; status: string; team1?: {name:string;players:string[]}|null; team2?: {name:string;players:string[]}|null; winner?: {name:string;players:string[]}|null; }
 interface Match { team1Index: number; team2Index: number; court?: number; timeSlot?: number; team1Score?: number; team2Score?: number; status: string; phase?: string; groupIndex?: number; round?: string; }
 interface QEntry { groupName: string; rank: number; teamIndex: number; teamName: string; championship: 'gold'|'silver'|'bronze'; }
-interface Tournament { _id: string; name: string; description?: string; numberOfTeams: number; numberOfCourts?: number; tournamentFormat?: string; teamsPerGroup?: number; numberOfGroups?: number; maxTeams?: number; championshipStatus?: string; groups?: Group[]; qualificationSnapshot?: QEntry[]; bracketMatches?: BracketMatch[]; teams: {name:string;players:string[]}[]; matches: Match[]; scheduledDate: string; status: string; createdBy?: {name:string;email:string}; createdAt: string; }
+interface Tournament { _id: string; name: string; description?: string; numberOfTeams: number; numberOfCourts?: number; tournamentFormat?: string; teamsPerGroup?: number; numberOfGroups?: number; maxTeams?: number; championshipStatus?: string; qualificationRules?: { gold: number[]; silver: number[]; bronze: number[] }; womenQualificationRules?: { gold: number[]; silver: number[]; bronze: number[] }; groups?: Group[]; qualificationSnapshot?: QEntry[]; bracketMatches?: BracketMatch[]; teams: {name:string;players:string[]}[]; matches: Match[]; scheduledDate: string; status: string; createdBy?: {name:string;email:string}; createdAt: string; }
 
 /* ─── Constants ─────────────────────────────────────────────── */
 const ROUND_ORDER = ['round_of_32','round_of_16','quarter_final','semi_final','final'];
@@ -113,6 +114,13 @@ function GroupsTab({ tournament }: { tournament: Tournament }) {
           <div key={group._id} className="bg-slate-900/60 border border-white/8 rounded-2xl overflow-hidden">
             <div className="px-4 py-3 bg-slate-800/60 border-b border-white/6 flex items-center gap-2">
               <span className="text-amber-400 font-bold text-sm">{group.name}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                inferGroupCategory(group) === 'women'
+                  ? 'bg-pink-900/40 text-pink-300 border-pink-700/40'
+                  : 'bg-blue-900/40 text-blue-300 border-blue-700/40'
+              }`}>
+                {inferGroupCategory(group) === 'women' ? 'Women' : 'Men'}
+              </span>
               <span className="text-slate-600 text-xs">{group.teamIndices.length} teams</span>
             </div>
             <table className="w-full text-sm">
@@ -132,9 +140,10 @@ function GroupsTab({ tournament }: { tournament: Tournament }) {
                   const qe = tournament.qualificationSnapshot?.find(q => q.teamIndex === stat.teamIndex);
                   const projected = !qe
                     ? tournament.qualificationSnapshot === undefined
-                      ? (tournament as any).qualificationRules?.gold?.includes(rank+1) ? 'gold'
-                        : (tournament as any).qualificationRules?.silver?.includes(rank+1) ? 'silver'
-                        : (tournament as any).qualificationRules?.bronze?.includes(rank+1) ? 'bronze' : null
+                      ? championshipForRank(
+                          rank + 1,
+                          resolveQualificationRules(group, tournament.qualificationRules, tournament.womenQualificationRules)
+                        )
                       : null
                     : null;
                   const qual = qe?.championship ?? projected;

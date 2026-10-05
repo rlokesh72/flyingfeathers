@@ -57,11 +57,67 @@ export async function POST(
     if (tournament.tournamentFormat !== 'championship-groups') {
       return NextResponse.json({ error: 'Registrations only apply to championship-groups tournaments' }, { status: 400 });
     }
+
+    const body = await request.json();
+    const adminUser = verifyToken(request);
+
+    if (body.adminCreate) {
+      if (!adminUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      if (!['registration_open', 'registration_closed'].includes(tournament.championshipStatus ?? '')) {
+        return NextResponse.json({ error: 'Teams can only be added before groups are confirmed' }, { status: 400 });
+      }
+
+      const player1Name = String(body.player1Name || '').trim();
+      const player2Name = String(body.player2Name || '').trim();
+      if (!player1Name) {
+        return NextResponse.json({ error: 'Player 1 name is required' }, { status: 400 });
+      }
+
+      const players = [player1Name, player2Name].filter(Boolean);
+      const acceptNow = body.accept !== false;
+      const acceptedCount = (tournament.registrations ?? []).filter((r: any) => r.status === 'accepted').length;
+      if (acceptNow && tournament.maxTeams && acceptedCount >= tournament.maxTeams) {
+        return NextResponse.json({ error: `Cannot accept more than ${tournament.maxTeams} teams` }, { status: 400 });
+      }
+
+      const nextNumber = (tournament.registrations?.length ?? 0) + 1;
+      const teamName = String(body.teamName || '').trim() || `Team ${nextNumber}`;
+      const player1Email = String(body.player1Email || '').trim();
+      const player2Email = String(body.player2Email || '').trim();
+      const category = body.category === 'women' || body.category === 'men' ? body.category : undefined;
+
+      const registration = {
+        teamName,
+        players,
+        contactEmail: player1Email || player2Email || 'admin@flyingfeathers.co.uk',
+        status: acceptNow ? 'accepted' : 'pending',
+        appliedAt: new Date(),
+        reviewedAt: acceptNow ? new Date() : undefined,
+        player1Name,
+        player1Email: player1Email || undefined,
+        player2Name: player2Name || undefined,
+        player2Email: player2Email || undefined,
+        partnerStatus: player2Name ? 'confirmed' : 'none',
+        category,
+        notes: 'Added by admin',
+      };
+
+      if (!tournament.registrations) tournament.registrations = [];
+      tournament.registrations.push(registration as any);
+      if (acceptNow) {
+        tournament.numberOfTeams = (tournament.registrations ?? []).filter((r: any) => r.status === 'accepted').length;
+      }
+      await tournament.save();
+
+      const newReg = tournament.registrations[tournament.registrations.length - 1];
+      return NextResponse.json({ message: acceptNow ? 'Team added and accepted' : 'Team added', registration: newReg }, { status: 201 });
+    }
+
     if (tournament.championshipStatus !== 'registration_open') {
       return NextResponse.json({ error: 'Registrations are not currently open' }, { status: 400 });
     }
 
-    const { teamName, players, contactEmail, contactPhone } = await request.json();
+    const { teamName, players, contactEmail, contactPhone } = body;
 
     if (!teamName || !players || !contactEmail) {
       return NextResponse.json({ error: 'teamName, players, and contactEmail are required' }, { status: 400 });

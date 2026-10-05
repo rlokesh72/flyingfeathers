@@ -9,6 +9,7 @@ import { generateGroups, generateGroupMatches } from '../generateGroups';
 import { generateChampionshipBrackets } from '../generateBrackets';
 import { advanceKnockoutWinner } from '../generateBrackets';
 import { determineQualifiers } from '../qualifiers';
+import { inferGroupCategory, resolveQualificationRules, championshipForRank, WOMEN_QUALIFICATION_RULES } from '../qualification';
 import mongoose from 'mongoose';
 
 // ---------------------------------------------------------------------------
@@ -226,28 +227,43 @@ test('advanceKnockoutWinner is idempotent on double-call', () => {
   assertEqual(slotOnce, slotTwice, 'idempotent advancement');
 });
 
-// 13. Invalid config → validation error
-test('validateChampionshipConfig rejects non-power-of-2 qualifier totals', () => {
-  // 10 teams, 5 per group = 2 groups; gold=[1]→2 gold (power of 2 ✓)
-  // silver=[2,3]→4 (power of 2 ✓); bronze=[4,5]→4 (power of 2 ✓)
-  // 3 teams, 3 per group = 1 group → gold=[1]→1(power of 2 ✓), but maxTeams<4 → error
+// 13. Invalid config → overlapping ranks
+test('validateChampionshipConfig rejects duplicate qualification ranks', () => {
   const result = validateChampionshipConfig({
-    maxTeams: 6,        // 6/3=2 groups; gold=[1]→2 ✓ silver=[2]→2 ✓ bronze=[3]→2 ✓
-    teamsPerGroup: 3,
-    qualificationRules: { gold: [1], silver: [2], bronze: [3] },
+    maxTeams: 34,
+    teamsPerGroup: 6,
+    qualificationRules: { gold: [1], silver: [2, 3, 4], bronze: [5, 6] },
   });
-  // 6/3=2 groups → gold=2, silver=2, bronze=2 — all powers of 2 → valid
-  assert(result.valid, 'config should be valid');
+  assert(result.valid, 'flexible group sizes and ranks 1-6 should be valid');
 
-  // Now try a non-power-of-2 scenario: 12 teams, 4/group = 3 groups → gold=3 (not PoT)
   const invalid = validateChampionshipConfig({
-    maxTeams: 12,
-    teamsPerGroup: 4,
-    qualificationRules: { gold: [1], silver: [2, 3], bronze: [4] },
+    maxTeams: 34,
+    teamsPerGroup: 6,
+    qualificationRules: { gold: [1], silver: [1, 2], bronze: [5] },
   });
-  // gold=1×3=3 → NOT power of 2
-  assert(!invalid.valid, 'should be invalid due to gold=3');
-  assert(invalid.errors.some((e) => e.includes('Gold')), 'error mentions Gold');
+  assert(!invalid.valid, 'should be invalid due to rank 1 in gold and silver');
+  assert(invalid.errors.some((e) => e.includes('duplicate')), 'error mentions duplicate ranks');
+});
+
+// 15. Women's groups: 1st+2nd Gold, 3rd+4th Silver, 5th+6th Bronze
+test('Women qualification: 1–2 gold, 3–4 silver, 5–6 bronze', () => {
+  assertEqual(inferGroupCategory({ name: 'Group E' }), 'women', 'Group E defaults to women');
+  assertEqual(inferGroupCategory({ name: 'Group F' }), 'women', 'Group F defaults to women');
+  assertEqual(inferGroupCategory({ name: 'Group A' }), 'men', 'Group A defaults to men');
+  assertEqual(inferGroupCategory({ name: 'Group E', category: 'men' }), 'men', 'explicit category wins');
+
+  const womenRules = resolveQualificationRules({ name: 'Group E', category: 'women' });
+  assertEqual(championshipForRank(1, womenRules), 'gold', 'women 1st gold');
+  assertEqual(championshipForRank(2, womenRules), 'gold', 'women 2nd gold');
+  assertEqual(championshipForRank(3, womenRules), 'silver', 'women 3rd silver');
+  assertEqual(championshipForRank(4, womenRules), 'silver', 'women 4th silver');
+  assertEqual(championshipForRank(5, womenRules), 'bronze', 'women 5th bronze');
+  assertEqual(championshipForRank(6, womenRules), 'bronze', 'women 6th bronze');
+
+  const menRules = resolveQualificationRules({ name: 'Group A', category: 'men' });
+  assertEqual(championshipForRank(1, menRules), 'gold', 'men 1st gold');
+  assertEqual(championshipForRank(2, menRules), 'silver', 'men 2nd silver');
+  assertEqual(WOMEN_QUALIFICATION_RULES.gold.join(','), '1,2', 'women gold ranks');
 });
 
 // 14. Incomplete group stage → validation would block championship generation

@@ -14,9 +14,9 @@ export async function GET(
     User;
 
     const t = await Tournament.findById(id).select(
-      'name description scheduledDate maxTeams teamsPerGroup numberOfGroups championshipStatus qualificationRules registrations groups createdAt'
+      'name description scheduledDate maxTeams teamsPerGroup numberOfGroups championshipStatus qualificationRules registrations groups createdAt isSimulation'
     );
-    if (!t) return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
+    if (!t || t.isSimulation) return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
 
     const regs = t.registrations ?? [];
     return NextResponse.json({

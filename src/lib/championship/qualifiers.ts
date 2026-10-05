@@ -1,4 +1,9 @@
 import { calculateGroupStandings } from './standings';
+import {
+  championshipForRank,
+  resolveQualificationRules,
+  type QualificationRules,
+} from './qualification';
 
 export interface IQualificationEntry {
   groupId: string;
@@ -11,28 +16,26 @@ export interface IQualificationEntry {
 
 /**
  * Determine which teams qualify for each championship bracket.
- * Iterates groups, ranks teams, and assigns championship paths
- * based on qualificationRules.
+ * Men's groups use qualificationRules (1st Gold, 2–4 Silver, 5–6 Bronze).
+ * Women's groups use womenQualificationRules (1–2 Gold, 3–4 Silver, 5–6 Bronze).
  */
 export function determineQualifiers(
   groups: any[],
   teams: any[],
   allMatches: any[],
-  qualificationRules: { gold: number[]; silver: number[]; bronze: number[] }
+  qualificationRules: QualificationRules,
+  womenQualificationRules?: QualificationRules
 ): IQualificationEntry[] {
   const qualifiers: IQualificationEntry[] = [];
   const seenTeamIndices = new Set<number>();
 
   for (const group of groups) {
     const standings = calculateGroupStandings(group, teams, allMatches);
+    const rules = resolveQualificationRules(group, qualificationRules, womenQualificationRules);
 
     standings.forEach((teamStat, rankIndex) => {
       const rank = rankIndex + 1; // 1-indexed
-
-      let championship: 'gold' | 'silver' | 'bronze' | null = null;
-      if (qualificationRules.gold.includes(rank)) championship = 'gold';
-      else if (qualificationRules.silver.includes(rank)) championship = 'silver';
-      else if (qualificationRules.bronze.includes(rank)) championship = 'bronze';
+      const championship = championshipForRank(rank, rules);
 
       if (championship !== null) {
         if (seenTeamIndices.has(teamStat.teamIndex)) {

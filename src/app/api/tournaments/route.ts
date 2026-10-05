@@ -46,7 +46,8 @@ export async function GET(request: NextRequest) {
     // For public access, only show confirmed, in-progress, or completed tournaments
     if (isPublic) {
       query = {
-        status: { $in: ['confirmed', 'in-progress', 'completed'] }
+        status: { $in: ['confirmed', 'in-progress', 'completed'] },
+        isSimulation: { $ne: true },
       };
     }
     
@@ -166,7 +167,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const rules = qualificationRules ?? { gold: [1], silver: [2, 3], bronze: [4] };
+      const rules = qualificationRules ?? { gold: [1], silver: [2, 3, 4], bronze: [5, 6] };
+      const womenRules = { gold: [1, 2], silver: [3, 4], bronze: [5, 6] };
 
       const validation = validateChampionshipConfig({
         maxTeams: Number(maxTeams),
@@ -192,6 +194,7 @@ export async function POST(request: NextRequest) {
         teamsPerGroup: Number(teamsPerGroup),
         numberOfGroups,
         qualificationRules: rules,
+        womenQualificationRules: womenRules,
         championshipStatus: 'draft',
         teams: [],
         matches: [],
