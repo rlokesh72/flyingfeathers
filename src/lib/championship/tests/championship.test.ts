@@ -10,6 +10,13 @@ import { generateChampionshipBrackets } from '../generateBrackets';
 import { advanceKnockoutWinner } from '../generateBrackets';
 import { determineQualifiers } from '../qualifiers';
 import { inferGroupCategory, resolveQualificationRules, championshipForRank, WOMEN_QUALIFICATION_RULES } from '../qualification';
+import {
+  generateMensOpeningStage,
+  generateMensNextStage,
+  inspectMensNextStages,
+  rankMensTeams,
+  splitQualifiersByCategory,
+} from '../mensFormat';
 import mongoose from 'mongoose';
 
 // ---------------------------------------------------------------------------
@@ -204,6 +211,21 @@ test('advanceKnockoutWinner sets correct slot in next match', () => {
 });
 
 // 12. Same bracket match scored twice is idempotent
+test('advanceKnockoutWinner ignores a winner who did not play the match', () => {
+  const groups = generateGroups(teamIndices, TEAMS_PER_GROUP);
+  const qs = buildMockQualifiers(groups, QUAL_RULES);
+  const { bracketMatches } = generateChampionshipBrackets(qs, teams, 48);
+  const goldQFs = bracketMatches.filter(
+    (bm) => bm.championship === 'gold' && bm.round === 'quarter_final'
+  );
+  const firstQF = goldQFs[0];
+  const nextBefore = bracketMatches.find((m) => m._id.toString() === firstQF.nextMatchId?.toString());
+  const updated = advanceKnockoutWinner(bracketMatches as any[], firstQF._id.toString(), 999);
+  const nextAfter = updated.find((m) => m._id.toString() === firstQF.nextMatchId?.toString());
+  assertEqual(nextAfter?.team1Index, nextBefore?.team1Index, 'slot 1 unchanged');
+  assertEqual(nextAfter?.team2Index, nextBefore?.team2Index, 'slot 2 unchanged');
+});
+
 test('advanceKnockoutWinner is idempotent on double-call', () => {
   const groups = generateGroups(teamIndices, TEAMS_PER_GROUP);
   const qs = buildMockQualifiers(groups, QUAL_RULES);
@@ -273,6 +295,88 @@ test('Incomplete group stage detected when checking match completions', () => {
   const allCompleted = (matches as any[]).every((m) => (m.status as string) === 'completed');
   // Fresh matches are all 'scheduled', so not all completed
   assert(!allCompleted, 'New matches should not be completed');
+});
+
+test('Men opening stage: Gold RR + Silver R1 + Bronze R1 pairings', () => {
+  const qs = [
+    { groupName: 'Group A', rank: 1, teamIndex: 0, championship: 'gold' },
+    { groupName: 'Group B', rank: 1, teamIndex: 1, championship: 'gold' },
+    { groupName: 'Group C', rank: 1, teamIndex: 2, championship: 'gold' },
+    { groupName: 'Group D', rank: 1, teamIndex: 3, championship: 'gold' },
+    { groupName: 'Group A', rank: 2, teamIndex: 4, championship: 'silver' },
+    { groupName: 'Group A', rank: 3, teamIndex: 5, championship: 'silver' },
+    { groupName: 'Group A', rank: 4, teamIndex: 6, championship: 'silver' },
+    { groupName: 'Group B', rank: 2, teamIndex: 7, championship: 'silver' },
+    { groupName: 'Group B', rank: 3, teamIndex: 8, championship: 'silver' },
+    { groupName: 'Group B', rank: 4, teamIndex: 9, championship: 'silver' },
+    { groupName: 'Group C', rank: 2, teamIndex: 10, championship: 'silver' },
+    { groupName: 'Group C', rank: 3, teamIndex: 11, championship: 'silver' },
+    { groupName: 'Group C', rank: 4, teamIndex: 12, championship: 'silver' },
+    { groupName: 'Group D', rank: 2, teamIndex: 13, championship: 'silver' },
+    { groupName: 'Group D', rank: 3, teamIndex: 14, championship: 'silver' },
+    { groupName: 'Group D', rank: 4, teamIndex: 15, championship: 'silver' },
+    { groupName: 'Group A', rank: 5, teamIndex: 16, championship: 'bronze' },
+    { groupName: 'Group B', rank: 5, teamIndex: 17, championship: 'bronze' },
+    { groupName: 'Group C', rank: 5, teamIndex: 18, championship: 'bronze' },
+    { groupName: 'Group C', rank: 6, teamIndex: 19, championship: 'bronze' },
+    { groupName: 'Group D', rank: 5, teamIndex: 20, championship: 'bronze' },
+    { groupName: 'Group D', rank: 6, teamIndex: 21, championship: 'bronze' },
+  ] as any[];
+
+  const { bracketMatches } = generateMensOpeningStage(qs, 0, 4, 1);
+  const gold = bracketMatches.filter((m) => m.round === 'round_robin');
+  const silver = bracketMatches.filter((m) => m.championship === 'silver');
+  const bronze = bracketMatches.filter((m) => m.championship === 'bronze');
+
+  assertEqual(gold.length, 6, 'gold RR match count');
+  assertEqual(silver.length, 6, 'silver R1 match count');
+  assertEqual(bronze.length, 3, 'bronze R1 match count');
+
+  const a2b4 = silver.find((m) => m.sequence === 0);
+  assertEqual(a2b4?.team1Index, 4, 'A2');
+  assertEqual(a2b4?.team2Index, 9, 'B4');
+  const c5d6 = bronze.find((m) => m.sequence === 1);
+  assertEqual(c5d6?.team1Index, 18, 'C5');
+  assertEqual(c5d6?.team2Index, 21, 'D6');
+  assertEqual(inspectMensNextStages(bracketMatches).length, 0, 'no next stage until R1 complete');
+
+  const { men, women } = splitQualifiersByCategory(
+    [...qs, { groupName: 'Group E', rank: 1, teamIndex: 30, championship: 'gold' } as any],
+    [{ name: 'Group E', category: 'women' }]
+  );
+  assertEqual(women.length, 1, 'women split out');
+  assert(men.length > 0, 'men remain');
+});
+
+test('Men ranking: wins then PD then PF', () => {
+  const ranked = rankMensTeams(
+    [1, 2, 3],
+    [
+      { team1Index: 1, team2Index: 9, team1Score: 21, team2Score: 10, status: 'completed' },
+      { team1Index: 2, team2Index: 8, team1Score: 21, team2Score: 18, status: 'completed' },
+      { team1Index: 3, team2Index: 7, team1Score: 15, team2Score: 21, status: 'completed' },
+    ],
+    [{}, { name: 'One' }, { name: 'Two' }, { name: 'Three' }]
+  );
+  assertEqual(ranked[0].teamIndex, 1, 'best PD among winners first');
+  assertEqual(ranked[1].teamIndex, 2, 'other winner second');
+  assertEqual(ranked[2].teamIndex, 3, 'loser last');
+});
+
+test('Silver R2 pairs AB winners vs CD winners by R1 PD', () => {
+  const r1 = [
+    { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 0, team1Index: 4, team2Index: 9, team1Score: 21, team2Score: 10, winnerIndex: 4, status: 'completed' },
+    { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 1, team1Index: 5, team2Index: 8, team1Score: 21, team2Score: 19, winnerIndex: 5, status: 'completed' },
+    { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 2, team1Index: 6, team2Index: 7, team1Score: 21, team2Score: 15, winnerIndex: 6, status: 'completed' },
+    { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 3, team1Index: 10, team2Index: 15, team1Score: 21, team2Score: 8, winnerIndex: 10, status: 'completed' },
+    { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 4, team1Index: 11, team2Index: 14, team1Score: 21, team2Score: 18, winnerIndex: 11, status: 'completed' },
+    { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 5, team1Index: 12, team2Index: 13, team1Score: 21, team2Score: 16, winnerIndex: 12, status: 'completed' },
+  ];
+  assert(inspectMensNextStages(r1).includes('silver_r2'), 'R2 ready after R1');
+  const { bracketMatches } = generateMensNextStage('silver_r2', r1, [], 0, 1, 1);
+  assertEqual(bracketMatches.length, 3, 'three R2 matches');
+  assertEqual(bracketMatches[0].team1Index, 4, 'best AB vs weakest CD');
+  assertEqual(bracketMatches[0].team2Index, 11, 'CD ranked 3rd by PD');
 });
 
 // ---------------------------------------------------------------------------

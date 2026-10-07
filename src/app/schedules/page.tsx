@@ -4,18 +4,19 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Feather, ArrowLeft, Trophy, Users, CalendarDays, ChevronRight, Swords, BarChart2, Medal } from 'lucide-react';
 import { championshipForRank, inferGroupCategory, resolveQualificationRules } from '@/lib/championship/qualification';
+import OverallStandings from '@/app/dashboard/components/OverallStandings';
 
 /* ─── Types ────────────────────────────────────────────────── */
 interface TeamStat { teamIndex: number; teamName: string; players: string[]; wins: number; losses: number; pointsFor: number; pointsAgainst: number; pointDifference: number; matchesPlayed: number; }
 interface Group { _id: string; name: string; sequence: number; teamIndices: number[]; category?: 'men'|'women'; standings?: TeamStat[]; }
-interface BracketMatch { _id: string; championship: 'gold'|'silver'|'bronze'; round: string; sequence: number; team1Index?: number; team2Index?: number; team1Score?: number; team2Score?: number; winnerIndex?: number; status: string; team1?: {name:string;players:string[]}|null; team2?: {name:string;players:string[]}|null; winner?: {name:string;players:string[]}|null; }
+interface BracketMatch { _id: string; championship: 'gold'|'silver'|'bronze'; category?: 'men'|'women'; round: string; sequence: number; team1Index?: number; team2Index?: number; team1Score?: number; team2Score?: number; winnerIndex?: number; status: string; team1?: {name:string;players:string[]}|null; team2?: {name:string;players:string[]}|null; winner?: {name:string;players:string[]}|null; }
 interface Match { team1Index: number; team2Index: number; court?: number; timeSlot?: number; team1Score?: number; team2Score?: number; status: string; phase?: string; groupIndex?: number; round?: string; }
 interface QEntry { groupName: string; rank: number; teamIndex: number; teamName: string; championship: 'gold'|'silver'|'bronze'; }
 interface Tournament { _id: string; name: string; description?: string; numberOfTeams: number; numberOfCourts?: number; tournamentFormat?: string; teamsPerGroup?: number; numberOfGroups?: number; maxTeams?: number; championshipStatus?: string; qualificationRules?: { gold: number[]; silver: number[]; bronze: number[] }; womenQualificationRules?: { gold: number[]; silver: number[]; bronze: number[] }; groups?: Group[]; qualificationSnapshot?: QEntry[]; bracketMatches?: BracketMatch[]; teams: {name:string;players:string[]}[]; matches: Match[]; scheduledDate: string; status: string; createdBy?: {name:string;email:string}; createdAt: string; }
 
 /* ─── Constants ─────────────────────────────────────────────── */
-const ROUND_ORDER = ['round_of_32','round_of_16','quarter_final','semi_final','final'];
-const ROUND_LABELS: Record<string,string> = { round_of_32:'R32', round_of_16:'R16', quarter_final:'QF', semi_final:'SF', final:'Final' };
+const ROUND_ORDER = ['round_of_32','round_of_16','quarter_final','round_robin','crossover_r1','crossover_r2','semi_final','final'];
+const ROUND_LABELS: Record<string,string> = { round_of_32:'R32', round_of_16:'R16', quarter_final:'QF', round_robin:'RR', crossover_r1:'R1', crossover_r2:'R2', semi_final:'SF', final:'Final' };
 const C_COLORS: Record<string,{accent:string;border:string;bg:string;pill:string}> = {
   gold:   { accent:'text-yellow-400', border:'border-yellow-500/30', bg:'bg-yellow-900/20',  pill:'bg-yellow-900/40 text-yellow-300 border border-yellow-600/40' },
   silver: { accent:'text-slate-300',  border:'border-slate-500/30',  bg:'bg-slate-800/40',   pill:'bg-slate-700/50 text-slate-200 border border-slate-500/40' },
@@ -49,10 +50,40 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+type CategoryFilter = 'men' | 'women';
+
+function CategoryToggle({
+  value,
+  onChange,
+}: {
+  value: CategoryFilter;
+  onChange: (value: CategoryFilter) => void;
+}) {
+  return (
+    <div className="flex gap-1 p-1 rounded-xl bg-slate-900/80 border border-white/8">
+      {(['men', 'women'] as const).map((c) => (
+        <button
+          key={c}
+          onClick={() => onChange(c)}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold capitalize transition-colors ${
+            value === c
+              ? c === 'women' ? 'bg-pink-700 text-white' : 'bg-blue-700 text-white'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          {c === 'women' ? 'Women' : 'Men'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ─── Tab: Groups & Standings ───────────────────────────────── */
-function GroupsTab({ tournament }: { tournament: Tournament }) {
+function GroupsTab({ tournament, category }: { tournament: Tournament; category?: CategoryFilter }) {
   const isChamp = tournament.tournamentFormat === 'championship-groups';
-  const groups = tournament.groups ?? [];
+  const groups = (tournament.groups ?? []).filter((group) =>
+    !category || inferGroupCategory(group) === category
+  );
 
   // ── Non-championship: show flat tournament.standings ──────────
   if (!isChamp) {
@@ -132,6 +163,7 @@ function GroupsTab({ tournament }: { tournament: Tournament }) {
                   <th className="text-center px-3 py-2">W</th>
                   <th className="text-center px-3 py-2">L</th>
                   <th className="text-center px-3 py-2">+/-</th>
+                  <th className="text-center px-3 py-2 hidden sm:table-cell">PF</th>
                   <th className="text-center px-3 py-2 hidden sm:table-cell">Qual</th>
                 </tr>
               </thead>
@@ -151,8 +183,8 @@ function GroupsTab({ tournament }: { tournament: Tournament }) {
                     <tr key={rank} className="border-b border-white/4 last:border-0 hover:bg-white/2 transition-colors">
                       <td className="px-4 py-3 text-slate-500 font-medium">{rank+1}</td>
                       <td className="px-4 py-3">
-                        <p className="font-semibold text-white">{stat.teamName ?? tournament.teams[stat.teamIndex]?.name}</p>
-                        <p className="text-xs text-slate-500">{(stat.players ?? tournament.teams[stat.teamIndex]?.players ?? []).join(' & ')}</p>
+                        <p className="font-semibold text-white break-words">{stat.teamName ?? tournament.teams[stat.teamIndex]?.name}</p>
+                        <p className="text-xs text-slate-500 break-words">{(stat.players ?? tournament.teams[stat.teamIndex]?.players ?? []).join(' & ')}</p>
                       </td>
                       <td className="text-center px-3 py-3 text-slate-400">{stat.matchesPlayed}</td>
                       <td className="text-center px-3 py-3 text-green-400 font-semibold">{stat.wins}</td>
@@ -160,6 +192,7 @@ function GroupsTab({ tournament }: { tournament: Tournament }) {
                       <td className={`text-center px-3 py-3 font-bold ${stat.pointDifference > 0 ? 'text-green-400' : stat.pointDifference < 0 ? 'text-red-400' : 'text-slate-400'}`}>
                         {stat.pointDifference > 0 ? '+' : ''}{stat.pointDifference}
                       </td>
+                      <td className="text-center px-3 py-3 text-slate-400 hidden sm:table-cell">{stat.pointsFor ?? 0}</td>
                       <td className="text-center px-3 py-3 hidden sm:table-cell">
                         {qual ? (
                           <span className={`text-xs ${qual === 'gold' ? 'text-yellow-400' : qual === 'silver' ? 'text-slate-300' : 'text-orange-400'}`}>
@@ -180,19 +213,25 @@ function GroupsTab({ tournament }: { tournament: Tournament }) {
 }
 
 /* ─── Tab: Group Matches ────────────────────────────────────── */
-function MatchesTab({ tournament }: { tournament: Tournament }) {
+function MatchesTab({ tournament, category }: { tournament: Tournament; category?: CategoryFilter }) {
   const isChamp = tournament.tournamentFormat === 'championship-groups';
+  const groups = tournament.groups ?? [];
+  const allowedGroups = new Set(
+    groups.filter((g) => !category || inferGroupCategory(g) === category).map((g) => g.sequence)
+  );
 
   // Championship-groups: only group-phase matches. Others: all matches.
   const groupMatches = tournament.matches
     .map((m, i) => ({ ...m, index: i }))
-    .filter(m => !isChamp || m.phase === 'group');
+    .filter(m => {
+      if (isChamp && m.phase !== 'group') return false;
+      if (isChamp && category) return allowedGroups.has(m.groupIndex ?? -1);
+      return true;
+    });
 
   if (!groupMatches.length) {
     return <EmptyState icon="📋" title="No matches yet" sub="Matches will appear once the tournament begins." />;
   }
-
-  const groups = tournament.groups ?? [];
 
   // For non-champ tournaments group all matches under a single "bucket" (groupIndex 0)
   // For champ tournaments, bucket by groupIndex
@@ -224,7 +263,7 @@ function MatchesTab({ tournament }: { tournament: Tournament }) {
         return (
           <div key={gIdx}>
             {isChamp && <p className="text-amber-400 text-sm font-semibold mb-3 uppercase tracking-wide">{group?.name ?? `Group ${Number(gIdx)+1}`}</p>}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {matches.map(match => {
                 const t1 = tournament.teams[match.team1Index];
                 const t2 = tournament.teams[match.team2Index];
@@ -233,27 +272,24 @@ function MatchesTab({ tournament }: { tournament: Tournament }) {
                 const t2Wins = done && (match.team2Score ?? 0) > (match.team1Score ?? 0);
                 return (
                   <div key={match.index} className={`rounded-2xl border p-4 ${done ? 'bg-slate-900/60 border-white/8' : 'bg-slate-900/40 border-white/5'}`}>
-                    <div className="flex items-center gap-2">
-                      {/* Team 1 */}
-                      <div className={`flex-1 min-w-0 ${t1Wins ? 'opacity-100' : done ? 'opacity-50' : 'opacity-80'}`}>
-                        <p className={`font-semibold text-sm truncate ${t1Wins ? 'text-white' : 'text-slate-300'}`}>{t1?.name ?? 'TBD'}</p>
-                        <p className="text-[11px] text-slate-500 truncate">{t1?.players?.join(' & ')}</p>
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                      <div className={t1Wins ? 'opacity-100' : done ? 'opacity-50' : 'opacity-90'}>
+                        <p className={`font-semibold text-sm break-words ${t1Wins ? 'text-white' : 'text-slate-200'}`}>{t1?.name ?? 'TBD'}</p>
+                        <p className="text-[11px] text-slate-500 break-words">{t1?.players?.join(' & ')}</p>
                       </div>
-                      {/* Score */}
-                      <div className="text-center shrink-0 px-2">
+                      <div className="text-center shrink-0 px-1">
                         {done ? (
                           <p className="text-lg font-bold text-white tabular-nums">{match.team1Score} <span className="text-slate-500">–</span> {match.team2Score}</p>
                         ) : (
-                          <p className="text-xs text-slate-600 font-medium">vs</p>
+                          <p className="text-xs text-slate-500 font-medium">vs</p>
                         )}
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${done ? 'text-green-400 bg-green-900/20' : 'text-slate-600'}`}>
-                          {done ? '✓ Done' : '⏳'}
+                          {done ? '✓ Done' : 'Upcoming'}
                         </span>
                       </div>
-                      {/* Team 2 */}
-                      <div className={`flex-1 min-w-0 text-right ${t2Wins ? 'opacity-100' : done ? 'opacity-50' : 'opacity-80'}`}>
-                        <p className={`font-semibold text-sm truncate ${t2Wins ? 'text-white' : 'text-slate-300'}`}>{t2?.name ?? 'TBD'}</p>
-                        <p className="text-[11px] text-slate-500 truncate">{t2?.players?.join(' & ')}</p>
+                      <div className={`text-right ${t2Wins ? 'opacity-100' : done ? 'opacity-50' : 'opacity-90'}`}>
+                        <p className={`font-semibold text-sm break-words ${t2Wins ? 'text-white' : 'text-slate-200'}`}>{t2?.name ?? 'TBD'}</p>
+                        <p className="text-[11px] text-slate-500 break-words">{t2?.players?.join(' & ')}</p>
                       </div>
                     </div>
                   </div>
@@ -268,13 +304,15 @@ function MatchesTab({ tournament }: { tournament: Tournament }) {
 }
 
 /* ─── Tab: Championships ────────────────────────────────────── */
-function ChampionshipsTab({ tournament }: { tournament: Tournament }) {
+function ChampionshipsTab({ tournament, category }: { tournament: Tournament; category?: CategoryFilter }) {
   const [sub, setSub] = useState<'gold'|'silver'|'bronze'|'overall'>('gold');
-  const bms = tournament.bracketMatches ?? [];
+  const bms = (tournament.bracketMatches ?? []).filter((m) =>
+    !category || (category === 'women' ? m.category === 'women' : m.category !== 'women')
+  );
 
   if (!bms.length) {
     const cs = tournament.championshipStatus ?? '';
-    return <EmptyState icon="🏆" title={cs === 'group_stage_completed' ? 'Brackets generating soon' : 'Championships not started'} sub="Knockout brackets will appear here once the group stage is confirmed." />;
+    return <EmptyState icon="🏆" title={cs === 'group_stage_completed' ? 'Championships generating soon' : 'Championships not started'} sub="Gold, Silver and Bronze matches will appear here once the group stage is confirmed." />;
   }
 
   const byChamp = {
@@ -284,6 +322,29 @@ function ChampionshipsTab({ tournament }: { tournament: Tournament }) {
   };
 
   function derivePlacements(matches: BracketMatch[]) {
+    const rr = matches.filter(m => m.round === 'round_robin');
+    if (rr.length && rr.every(m => m.status === 'completed')) {
+      const indices = Array.from(new Set(rr.flatMap(m => [m.team1Index, m.team2Index].filter((idx): idx is number => idx !== undefined && idx >= 0))));
+      const stats = indices.map(idx => ({
+        idx, name: tournament.teams[idx]?.name ?? `Team ${idx}`, players: tournament.teams[idx]?.players ?? [],
+        wins: 0, pf: 0, pd: 0,
+      }));
+      const by = new Map(stats.map(s => [s.idx, s]));
+      for (const m of rr) {
+        if (m.team1Score == null || m.team2Score == null) continue;
+        const s1 = by.get(m.team1Index!);
+        const s2 = by.get(m.team2Index!);
+        if (s1) { s1.pf += m.team1Score; s1.pd += m.team1Score - m.team2Score; if (m.team1Score > m.team2Score) s1.wins++; }
+        if (s2) { s2.pf += m.team2Score; s2.pd += m.team2Score - m.team1Score; if (m.team2Score > m.team1Score) s2.wins++; }
+      }
+      stats.sort((a, b) => b.wins - a.wins || b.pd - a.pd || b.pf - a.pf);
+      return stats.map((s, i) => ({
+        place: i + 1,
+        team: { name: s.name, players: s.players },
+        label: i === 0 ? 'Champion' : i === 1 ? 'Runner-Up' : `${i + 1}th Place`,
+      }));
+    }
+
     const resolve = (idx?: number, obj?: {name:string;players:string[]}|null) =>
       obj ?? (idx !== undefined && idx >= 0 ? tournament.teams[idx] ?? null : null);
     const placements: {place:number;team:{name:string;players:string[]}|null;label:string}[] = [];
@@ -309,7 +370,6 @@ function ChampionshipsTab({ tournament }: { tournament: Tournament }) {
   function BracketView({ championship }: { championship: 'gold'|'silver'|'bronze' }) {
     const matches = byChamp[championship];
     const cc = C_COLORS[championship];
-    const rounds = ROUND_ORDER.filter(r => matches.some(m => m.round === r));
     const placements = derivePlacements(matches);
     const champion = placements.find(p => p.place === 1);
     const runnerUp = placements.find(p => p.place === 2);
@@ -347,87 +407,61 @@ function ChampionshipsTab({ tournament }: { tournament: Tournament }) {
           </div>
         )}
 
-        {/* Bracket */}
-        <div className={`rounded-2xl border overflow-hidden ${cc.border}`}>
-          <div className={`px-4 py-2.5 border-b ${cc.border} ${cc.bg}`}>
-            <p className={`text-sm font-semibold ${cc.accent}`}>
-              {championship === 'gold' ? '🥇' : championship === 'silver' ? '🥈' : '🥉'} {championship.charAt(0).toUpperCase() + championship.slice(1)} Bracket
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <div className="flex gap-4 p-4 min-w-max">
-              {rounds.map(round => (
-                <div key={round} className="flex flex-col gap-3 min-w-[160px]">
-                  <p className={`text-[11px] font-bold uppercase tracking-widest text-center ${cc.accent}`}>{ROUND_LABELS[round]}</p>
-                  {matches.filter(m => m.round === round).sort((a,b) => a.sequence - b.sequence).map(bm => {
-                    const t1 = bm.team1?.name ?? (bm.team1Index !== undefined && bm.team1Index >= 0 ? tournament.teams[bm.team1Index]?.name : null) ?? 'TBD';
-                    const t2 = bm.team2?.name ?? (bm.team2Index !== undefined && bm.team2Index >= 0 ? tournament.teams[bm.team2Index]?.name : null) ?? 'TBD';
-                    const p1 = bm.team1?.players ?? (bm.team1Index !== undefined && bm.team1Index >= 0 ? tournament.teams[bm.team1Index]?.players : null) ?? [];
-                    const p2 = bm.team2?.players ?? (bm.team2Index !== undefined && bm.team2Index >= 0 ? tournament.teams[bm.team2Index]?.players : null) ?? [];
-                    const winnerName = bm.winner?.name ?? (bm.winnerIndex !== undefined && bm.winnerIndex >= 0 ? tournament.teams[bm.winnerIndex]?.name : null);
-                    const t1Wins = bm.status === 'completed' && !!winnerName && winnerName === t1;
-                    const t2Wins = bm.status === 'completed' && !!winnerName && winnerName === t2;
-                    const isTBD = t1 === 'TBD' && t2 === 'TBD';
-                    return (
-                      <div key={bm._id} className={`rounded-xl border p-2.5 ${isTBD ? 'opacity-30' : ''} ${bm.status === 'completed' ? `${cc.border} ${cc.bg}` : 'border-white/8 bg-slate-900/60'}`}>
-                        {/* Team 1 */}
-                        <div className={`flex items-center justify-between gap-1 py-1 px-1 rounded text-xs ${t1Wins ? 'text-green-400 font-semibold' : 'text-slate-300'}`}>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate">{t1}</p>
-                            {p1.length > 0 && <p className="text-[10px] text-slate-600 truncate">{p1.join(' & ')}</p>}
+        {(['men', 'women'] as const).map((gender) => {
+          const genderMatches = matches.filter((m) => gender === 'women' ? m.category === 'women' : m.category !== 'women');
+          if (!genderMatches.length) return null;
+          const genderRounds = ROUND_ORDER.filter((r) => genderMatches.some((m) => m.round === r));
+          return (
+            <div key={gender} className={`rounded-2xl border ${cc.border}`}>
+              <div className={`px-4 py-2.5 border-b ${cc.border} ${cc.bg} flex items-center justify-between`}>
+                <p className={`text-sm font-semibold ${cc.accent}`}>
+                  {championship === 'gold' ? '🥇' : championship === 'silver' ? '🥈' : '🥉'} {championship.charAt(0).toUpperCase() + championship.slice(1)} · {gender === 'women' ? 'Women' : 'Men'}
+                </p>
+                <p className="text-[11px] text-slate-500">{genderMatches.length} matches</p>
+              </div>
+              <div className="p-4 space-y-4">
+                {genderRounds.map((round) => (
+                  <div key={round}>
+                    <p className={`text-[11px] font-bold uppercase tracking-widest mb-2 ${cc.accent}`}>{ROUND_LABELS[round]}</p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {genderMatches.filter((m) => m.round === round).sort((a, b) => a.sequence - b.sequence).map((bm) => {
+                        const t1 = bm.team1?.name ?? (bm.team1Index !== undefined && bm.team1Index >= 0 ? tournament.teams[bm.team1Index]?.name : null) ?? 'TBD';
+                        const t2 = bm.team2?.name ?? (bm.team2Index !== undefined && bm.team2Index >= 0 ? tournament.teams[bm.team2Index]?.name : null) ?? 'TBD';
+                        const p1 = bm.team1?.players ?? (bm.team1Index !== undefined && bm.team1Index >= 0 ? tournament.teams[bm.team1Index]?.players : null) ?? [];
+                        const p2 = bm.team2?.players ?? (bm.team2Index !== undefined && bm.team2Index >= 0 ? tournament.teams[bm.team2Index]?.players : null) ?? [];
+                        const winnerName = bm.winner?.name ?? (bm.winnerIndex !== undefined && bm.winnerIndex >= 0 ? tournament.teams[bm.winnerIndex]?.name : null);
+                        const t1Wins = bm.status === 'completed' && !!winnerName && winnerName === t1;
+                        const t2Wins = bm.status === 'completed' && !!winnerName && winnerName === t2;
+                        const isTBD = t1 === 'TBD' && t2 === 'TBD';
+                        return (
+                          <div key={bm._id} className={`rounded-xl border p-3 ${isTBD ? 'opacity-40' : ''} ${bm.status === 'completed' ? `${cc.border} ${cc.bg}` : 'border-white/8 bg-slate-900/60'}`}>
+                            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                              <div>
+                                <p className={`text-sm font-semibold break-words ${t1Wins ? 'text-green-400' : 'text-slate-200'}`}>{t1}</p>
+                                {p1.length > 0 && <p className="text-[11px] text-slate-500 break-words">{p1.join(' & ')}</p>}
+                              </div>
+                              <div className="text-center shrink-0">
+                                {bm.status === 'completed' ? (
+                                  <p className="text-sm font-mono font-bold text-white">{bm.team1Score}–{bm.team2Score}</p>
+                                ) : (
+                                  <p className="text-xs text-slate-500">vs</p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <p className={`text-sm font-semibold break-words ${t2Wins ? 'text-green-400' : 'text-slate-200'}`}>{t2}</p>
+                                {p2.length > 0 && <p className="text-[11px] text-slate-500 break-words">{p2.join(' & ')}</p>}
+                              </div>
+                            </div>
                           </div>
-                          {bm.status === 'completed' && <span className={`font-mono ml-1 shrink-0 ${t1Wins ? 'text-green-400' : 'text-slate-500'}`}>{bm.team1Score}</span>}
-                        </div>
-                        <div className="my-1 border-t border-white/6" />
-                        {/* Team 2 */}
-                        <div className={`flex items-center justify-between gap-1 py-1 px-1 rounded text-xs ${t2Wins ? 'text-green-400 font-semibold' : 'text-slate-300'}`}>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate">{t2}</p>
-                            {p2.length > 0 && <p className="text-[10px] text-slate-600 truncate">{p2.join(' & ')}</p>}
-                          </div>
-                          {bm.status === 'completed' && <span className={`font-mono ml-1 shrink-0 ${t2Wins ? 'text-green-400' : 'text-slate-500'}`}>{bm.team2Score}</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function OverallView() {
-    type P = { place:number; tier:string; team:string; players:string; badge:string };
-    const all: P[] = [];
-    const basePlaces: Record<string,number> = { gold:1, silver:5, bronze:9 };
-    (['gold','silver','bronze'] as const).forEach(tier => {
-      const ps = derivePlacements(byChamp[tier]);
-      ps.forEach(p => {
-        if (!p.team) return;
-        const absPlace = (basePlaces[tier] ?? 1) + p.place - 1;
-        all.push({ place: absPlace, tier, team: p.team.name, players: p.team.players?.join(' & ') ?? '', badge: p.place === 1 ? '🏆' : p.place === 2 ? '🎖️' : '' });
-      });
-    });
-    all.sort((a,b) => a.place - b.place);
-    if (!all.length) return <EmptyState icon="📊" title="No results yet" sub="Log championship matches to see the overall standings." />;
-    return (
-      <div className="space-y-2">
-        {all.map((p, i) => (
-          <div key={i} className={`flex items-center gap-4 rounded-2xl px-4 py-3 border ${C_COLORS[p.tier as 'gold'|'silver'|'bronze'].border} ${C_COLORS[p.tier as 'gold'|'silver'|'bronze'].bg}`}>
-            <div className="flex items-center gap-1.5 w-8 shrink-0">
-              <span className="text-slate-500 text-sm font-bold">{p.place}</span>
-              {p.badge && <span>{p.badge}</span>}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-white truncate">{p.team}</p>
-              <p className="text-xs text-slate-500 truncate">{p.players}</p>
-            </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full capitalize shrink-0 ${C_COLORS[p.tier as 'gold'|'silver'|'bronze'].pill}`}>{p.tier}</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   }
@@ -458,7 +492,15 @@ function ChampionshipsTab({ tournament }: { tournament: Tournament }) {
           );
         })}
       </div>
-      {sub === 'overall' ? <OverallView /> : <BracketView championship={sub} />}
+      {sub === 'overall' ? (
+        <OverallStandings
+          matches={[...byChamp.gold, ...byChamp.silver, ...byChamp.bronze]}
+          teams={tournament.teams}
+          category={category}
+        />
+      ) : (
+        <BracketView championship={sub} />
+      )}
     </div>
   );
 }
@@ -485,6 +527,7 @@ function TournamentView({ tournament, onBack }: { tournament: Tournament; onBack
   const doneCount  = tournament.matches.filter(m => m.status === 'completed').length;
   const cs         = tournament.championshipStatus ?? tournament.status ?? '';
 
+  const [category, setCategory] = useState<CategoryFilter>('men');
   const [tab, setTab] = useState<TabId>(() => {
     if (!isChamp) return 'matches'; // non-champ → show matches first
     const cst = tournament.championshipStatus ?? '';
@@ -493,10 +536,23 @@ function TournamentView({ tournament, onBack }: { tournament: Tournament; onBack
     return 'groups';
   });
 
+  const filteredGroups = isChamp
+    ? (tournament.groups ?? []).filter((g) => inferGroupCategory(g) === category)
+    : (tournament.groups ?? []);
+  const allowedGroupSeq = new Set(filteredGroups.map((g) => g.sequence));
+  const filteredGroupCount = isChamp
+    ? tournament.matches.filter((m) => m.phase === 'group' && allowedGroupSeq.has(m.groupIndex ?? -1)).length
+    : tournament.matches.length;
+  const filteredBmCount = isChamp
+    ? (tournament.bracketMatches ?? []).filter((m) =>
+        category === 'women' ? m.category === 'women' : m.category !== 'women'
+      ).length
+    : 0;
+
   const TABS: { id: TabId; label: string; icon: React.ElementType; count?: number }[] = isChamp ? [
-    { id: 'groups',        label: 'Groups',        icon: Users,    count: tournament.groups?.length },
-    { id: 'matches',       label: 'Group Matches', icon: Swords,   count: groupCount },
-    { id: 'championships', label: 'Championships', icon: Trophy,   count: bmCount },
+    { id: 'groups',        label: 'Groups',        icon: Users,    count: filteredGroups.length },
+    { id: 'matches',       label: 'Group Matches', icon: Swords,   count: filteredGroupCount },
+    { id: 'championships', label: 'Championships', icon: Trophy,   count: filteredBmCount },
   ] : [
     { id: 'matches',       label: 'Matches',       icon: Swords,   count: tournament.matches.length },
     { id: 'groups',        label: 'Standings',     icon: BarChart2 },
@@ -506,7 +562,7 @@ function TournamentView({ tournament, onBack }: { tournament: Tournament; onBack
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Sticky header */}
       <header className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur border-b border-white/6">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-6xl">
           <div className="flex items-center gap-3 h-14">
             <button onClick={onBack} className="text-slate-400 hover:text-white transition shrink-0">
               <ArrowLeft className="w-4 h-4" />
@@ -538,30 +594,33 @@ function TournamentView({ tournament, onBack }: { tournament: Tournament; onBack
 
       {/* Stats strip */}
       <div className="border-b border-white/5 bg-slate-900/50">
-        <div className="container mx-auto px-4 max-w-4xl py-3">
-          {isChamp ? (
-            <div className="flex gap-6 overflow-x-auto">
-              <StatBadge label="Teams"   value={tournament.numberOfTeams} color="text-amber-400" />
-              <StatBadge label="Groups"  value={tournament.numberOfGroups ?? '—'} color="text-purple-400" />
-              <StatBadge label="G.Matches" value={groupCount} color="text-cyan-400" />
-              <StatBadge label="Done"    value={doneCount} color="text-green-400" />
-              {bmCount > 0 && <StatBadge label="Knockouts" value={bmCount} color="text-yellow-400" />}
-            </div>
-          ) : (
-            <div className="flex gap-6">
-              <StatBadge label="Teams"   value={tournament.numberOfTeams} />
-              <StatBadge label="Matches" value={tournament.matches.length} />
-              <StatBadge label="Done"    value={doneCount} color="text-green-400" />
-            </div>
-          )}
+        <div className="container mx-auto px-4 max-w-6xl py-3">
+          <div className={`flex items-center gap-4 ${isChamp ? 'justify-between' : ''} flex-wrap`}>
+            {isChamp ? (
+              <div className="flex gap-6 overflow-x-auto">
+                <StatBadge label="Teams"   value={tournament.numberOfTeams} color="text-amber-400" />
+                <StatBadge label="Groups"  value={tournament.numberOfGroups ?? '—'} color="text-purple-400" />
+                <StatBadge label="G.Matches" value={groupCount} color="text-cyan-400" />
+                <StatBadge label="Done"    value={doneCount} color="text-green-400" />
+                {bmCount > 0 && <StatBadge label="Knockouts" value={bmCount} color="text-yellow-400" />}
+              </div>
+            ) : (
+              <div className="flex gap-6">
+                <StatBadge label="Teams"   value={tournament.numberOfTeams} />
+                <StatBadge label="Matches" value={tournament.matches.length} />
+                <StatBadge label="Done"    value={doneCount} color="text-green-400" />
+              </div>
+            )}
+            {isChamp && <CategoryToggle value={category} onChange={setCategory} />}
+          </div>
         </div>
       </div>
 
       {/* Tab content */}
-      <div className="container mx-auto px-4 max-w-4xl py-6">
-        {tab === 'groups'        && <GroupsTab tournament={tournament} />}
-        {tab === 'matches'       && <MatchesTab tournament={tournament} />}
-        {tab === 'championships' && <ChampionshipsTab tournament={tournament} />}
+      <div className="container mx-auto px-4 max-w-6xl py-6">
+        {tab === 'groups'        && <GroupsTab tournament={tournament} category={isChamp ? category : undefined} />}
+        {tab === 'matches'       && <MatchesTab tournament={tournament} category={isChamp ? category : undefined} />}
+        {tab === 'championships' && <ChampionshipsTab tournament={tournament} category={isChamp ? category : undefined} />}
       </div>
     </div>
   );
@@ -654,7 +713,7 @@ export default function SchedulesPage() {
 
       {/* Header */}
       <header className="border-b border-white/6 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
-        <div className="container mx-auto px-4 max-w-4xl h-14 flex items-center gap-3">
+        <div className="container mx-auto px-4 max-w-6xl h-14 flex items-center gap-3">
           <button onClick={() => router.push('/')} className="text-slate-400 hover:text-white transition">
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -666,7 +725,7 @@ export default function SchedulesPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 max-w-4xl py-8">
+      <div className="container mx-auto px-4 max-w-6xl py-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white mb-1">Live Tournaments</h1>
           <p className="text-slate-500 text-sm">Select a tournament to see groups, matches and live standings</p>

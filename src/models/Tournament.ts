@@ -76,7 +76,8 @@ export interface IQualificationEntry {
 export interface IBracketMatch {
   _id: mongoose.Types.ObjectId;
   championship: 'gold' | 'silver' | 'bronze';
-  round: 'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final';
+  round: 'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'final' | 'round_robin' | 'crossover_r1' | 'crossover_r2';
+  category?: 'men' | 'women';
   sequence: number;
   team1Index?: number;
   team2Index?: number;
@@ -246,9 +247,10 @@ const BracketMatchSchema = new mongoose.Schema({
   championship: { type: String, enum: ['gold', 'silver', 'bronze'], required: true },
   round: {
     type: String,
-    enum: ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'final'],
+    enum: ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'final', 'round_robin', 'crossover_r1', 'crossover_r2'],
     required: true,
   },
+  category: { type: String, enum: ['men', 'women'] },
   sequence: { type: Number, required: true },
   team1Index: { type: Number },
   team2Index: { type: Number },

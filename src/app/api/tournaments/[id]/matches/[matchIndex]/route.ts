@@ -69,25 +69,22 @@ export async function PUT(
       tournament.bracketMatches?.length &&
       (status === 'completed' || (!status && team1Score !== team2Score))
     ) {
-      const winnerTeamIndex =
-        team1Score >= team2Score ? match.team1Index : match.team2Index;
+      const bracketMatchId = match.bracketMatchId;
+      const bracketMatch = tournament.bracketMatches.find(
+        (bm: any) => bm._id.toString() === bracketMatchId
+      );
 
-      // Skip advancement for -1 (TBD) teams
-      if (winnerTeamIndex >= 0) {
-        const bracketMatchId = match.bracketMatchId;
+      if (bracketMatch) {
+        const t1 = bracketMatch.team1Index ?? match.team1Index;
+        const t2 = bracketMatch.team2Index ?? match.team2Index;
+        const winnerTeamIndex = team1Score >= team2Score ? t1 : t2;
 
-        // Find and update the bracketMatch
-        const bracketMatch = tournament.bracketMatches.find(
-          (bm: any) => bm._id.toString() === bracketMatchId
-        );
+        bracketMatch.team1Score = team1Score;
+        bracketMatch.team2Score = team2Score;
+        bracketMatch.status = 'completed';
 
-        if (bracketMatch) {
-          // Always update scores on the bracketMatch (so championships API returns them)
-          bracketMatch.team1Score = team1Score;
-          bracketMatch.team2Score = team2Score;
-          bracketMatch.status = 'completed';
-
-          // Idempotent: only advance winner if it changed
+        // Skip advancement for TBD teams or a winner who did not play this match
+        if (winnerTeamIndex >= 0 && (winnerTeamIndex === t1 || winnerTeamIndex === t2)) {
           if (bracketMatch.winnerIndex !== winnerTeamIndex) {
             bracketMatch.winnerIndex = winnerTeamIndex;
 
@@ -103,19 +100,17 @@ export async function PUT(
               const bm = (tournament.bracketMatches ?? [])[idx];
               if (!bm) return;
 
-              // Update team slots that were changed by advanceKnockoutWinner
+              const global = (tournament.matches ?? []).find(
+                (m: any) => m.bracketMatchId && m.bracketMatchId === (updated._id?.toString?.() ?? String(updated._id))
+              );
+
               if (updated.team1Index !== undefined && bm.team1Index !== updated.team1Index) {
                 bm.team1Index = updated.team1Index;
-                // Also sync into global matches[]
-                if (updated.matchIndex !== undefined && updated.matchIndex < tournament.matches.length) {
-                  tournament.matches[updated.matchIndex].team1Index = updated.team1Index;
-                }
+                if (global) global.team1Index = updated.team1Index;
               }
               if (updated.team2Index !== undefined && bm.team2Index !== updated.team2Index) {
                 bm.team2Index = updated.team2Index;
-                if (updated.matchIndex !== undefined && updated.matchIndex < tournament.matches.length) {
-                  tournament.matches[updated.matchIndex].team2Index = updated.team2Index;
-                }
+                if (global) global.team2Index = updated.team2Index;
               }
               if (updated.winnerIndex !== undefined) bm.winnerIndex = updated.winnerIndex;
               if (updated.status) bm.status = updated.status;

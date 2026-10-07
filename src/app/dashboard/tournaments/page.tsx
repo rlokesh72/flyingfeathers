@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import ChampionshipBracket from '../components/ChampionshipBracket';
 import GroupBuilder from '../components/GroupBuilder';
+import MensChampionshipPanel, { type MensTeamStat } from '../components/MensChampionshipPanel';
+import OverallStandings from '../components/OverallStandings';
 import { championshipForRank, inferGroupCategory, resolveQualificationRules } from '@/lib/championship/qualification';
 
 interface Match {
@@ -15,6 +17,9 @@ interface Match {
   team1Score?: number;
   team2Score?: number;
   status: 'scheduled' | 'in-progress' | 'completed';
+  phase?: string;
+  bracketMatchId?: string;
+  round?: string;
 }
 
 interface TeamStats {
@@ -74,6 +79,7 @@ interface BracketMatchData {
   nextMatchId?: string;
   nextSlot?: 1 | 2;
   matchIndex?: number;
+  category?: 'men' | 'women';
   team1?: { index: number; name: string; players: string[] } | null;
   team2?: { index: number; name: string; players: string[] } | null;
   winner?: { index: number; name: string; players: string[] } | null;
@@ -328,6 +334,9 @@ export default function TournamentsPage() {
   const [regCategoryFilter, setRegCategoryFilter] = useState<'all' | 'men' | 'women'>('all');
   const [groups, setGroups] = useState<Group[]>([]);
   const [bracketData, setBracketData] = useState<{ gold: BracketMatchData[]; silver: BracketMatchData[]; bronze: BracketMatchData[] }>({ gold: [], silver: [], bronze: [] });
+  const [mensFormat, setMensFormat] = useState(false);
+  const [mensNextStages, setMensNextStages] = useState<string[]>([]);
+  const [mensStandings, setMensStandings] = useState<{ gold: MensTeamStat[]; silver: MensTeamStat[]; bronze: MensTeamStat[] }>({ gold: [], silver: [], bronze: [] });
   const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmModal, setConfirmModal] = useState<{
@@ -684,6 +693,13 @@ export default function TournamentsPage() {
       if (res.ok) {
         const data = await res.json();
         setBracketData({ gold: data.gold ?? [], silver: data.silver ?? [], bronze: data.bronze ?? [] });
+        setMensFormat(!!data.mensFormat);
+        setMensNextStages(data.nextStages ?? []);
+        setMensStandings({
+          gold: data.mensStandings?.gold ?? [],
+          silver: data.mensStandings?.silver ?? [],
+          bronze: data.mensStandings?.bronze ?? [],
+        });
       }
     } catch { /* ignore */ }
   };
@@ -925,6 +941,25 @@ export default function TournamentsPage() {
     finally { setLoading(false); }
   };
 
+  const generateNextMensStage = async () => {
+    if (!selectedTournament) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/tournaments/${selectedTournament._id}/championships/next-stage`, {
+        method: 'POST', credentials: 'include',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await refreshSelectedTournament();
+        await fetchBrackets(selectedTournament._id);
+        showToast(data.message || 'Next stage created', 'success');
+      } else {
+        showToast(data.error || 'Failed to generate next stage', 'error');
+      }
+    } catch { showToast('Error generating next stage', 'error'); }
+    finally { setLoading(false); }
+  };
+
   const generateChampionshipsAction = async () => {
     if (!selectedTournament) return;
     setLoading(true);
@@ -935,7 +970,7 @@ export default function TournamentsPage() {
       if (res.ok) {
         await refreshSelectedTournament();
         await fetchBrackets(selectedTournament._id);
-        showToast('Championship brackets generated!', 'success');
+        showToast('Championship matches generated — Gold is a 4-team round robin', 'success');
         setChampTab('championships');
       } else {
         const err = await res.json();
@@ -1755,88 +1790,6 @@ export default function TournamentsPage() {
     );
   };
 
-  // ── OverallStandings: full tournament leaderboard across all 3 championships ──
-  const OverallStandings = ({ bracketData, teams }: {
-    bracketData: { gold: BracketMatchData[]; silver: BracketMatchData[]; bronze: BracketMatchData[] };
-    teams: Array<{ name: string; players: string[] }>;
-  }) => {
-    type Placement = { place: number; tier: string; tierLabel: string; team: string; players: string; badge: string };
-
-    function getPlacementsForTier(
-      matches: BracketMatchData[],
-      tierLabel: string,
-      basePlace: number,
-    ): Placement[] {
-      const resolve = (idx?: number, obj?: any) =>
-        obj ?? (idx !== undefined && idx >= 0 ? teams[idx] ?? null : null);
-
-      const results: Placement[] = [];
-      const badges: Record<string, string> = { gold: '🥇', silver: '🥈', bronze: '🥉' };
-      const tier = tierLabel as 'gold' | 'silver' | 'bronze';
-
-      const finalM  = matches.find(m => m.round === 'final');
-      const semiMs  = matches.filter(m => m.round === 'semi_final');
-
-      if (finalM?.status === 'completed') {
-        const winner = resolve(finalM.winnerIndex, (finalM as any).winner);
-        const loserIdx = finalM.winnerIndex === finalM.team1Index ? finalM.team2Index : finalM.team1Index;
-        const loserObj = finalM.winnerIndex === finalM.team1Index ? (finalM as any).team2 : (finalM as any).team1;
-        const loser = resolve(loserIdx, loserObj);
-        if (winner) results.push({ place: basePlace,     tier, tierLabel, team: winner.name, players: winner.players?.join(' & ') ?? '', badge: badges[tier] });
-        if (loser)  results.push({ place: basePlace + 1, tier, tierLabel, team: loser.name,  players: loser.players?.join(' & ') ?? '',  badge: '🎖️' });
-      }
-
-      semiMs.forEach(m => {
-        if (m.status !== 'completed') return;
-        const loserIdx = m.winnerIndex === m.team1Index ? m.team2Index : m.team1Index;
-        const loserObj = m.winnerIndex === m.team1Index ? (m as any).team2 : (m as any).team1;
-        const loser = resolve(loserIdx, loserObj);
-        if (loser) results.push({ place: basePlace + 2, tier, tierLabel, team: loser.name, players: loser.players?.join(' & ') ?? '', badge: '' });
-      });
-
-      return results;
-    }
-
-    const all: Placement[] = [
-      ...getPlacementsForTier(bracketData.gold,   'gold',   1),
-      ...getPlacementsForTier(bracketData.silver, 'silver', bracketData.gold.length > 0 ? 5 : 1),
-      ...getPlacementsForTier(bracketData.bronze, 'bronze', bracketData.gold.length > 0 ? 9 : 1),
-    ];
-
-    const tierColor: Record<string, string> = {
-      gold:   'text-yellow-400 bg-yellow-900/20 border-yellow-500/30',
-      silver: 'text-slate-300 bg-slate-700/30 border-slate-500/30',
-      bronze: 'text-orange-400 bg-orange-900/20 border-orange-500/30',
-    };
-
-    return (
-      <div className="space-y-3">
-        <div className="text-slate-400 text-sm font-semibold mb-2">📊 Overall Tournament Standings</div>
-        {all.length === 0 ? (
-          <div className="text-slate-500 text-sm text-center py-8">Log championship match results to see standings here.</div>
-        ) : (
-          <div className="space-y-2">
-            {all.map((p, i) => (
-              <div key={i} className={`flex items-center gap-4 rounded-xl px-4 py-3 border ${tierColor[p.tier]}`}>
-                <div className="flex items-center gap-2 w-8 shrink-0">
-                  <span className="text-slate-500 text-sm font-bold">{p.place}</span>
-                  {p.badge && <span className="text-base">{p.badge}</span>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-white truncate">{p.team}</p>
-                  <p className="text-xs text-slate-500 truncate">{p.players}</p>
-                </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full border capitalize shrink-0 ${tierColor[p.tier]}`}>
-                  {p.tierLabel}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // ── GroupMatchesPanel: inline score editing for championship-groups ──────
   const GroupMatchesPanel = ({
     tournament, groups, onSave,
@@ -2239,9 +2192,16 @@ export default function TournamentsPage() {
               {tournament.matches.filter((m: any) => m.phase === 'group' && m.status !== 'completed').length} group matches remaining before you can confirm standings
             </div>
           )}
-          {cs === 'group_stage_completed' && (
+          {(cs === 'group_stage_completed' ||
+            ((cs === 'knockouts_active' || cs === 'knockouts_generated') &&
+              (tournament.isSimulation || !tournament.matches.some((m: any) => m.phase && m.phase !== 'group' && m.status === 'completed')))) && (
             <Button onClick={generateChampionshipsAction} disabled={loading} className="bg-amber-600 hover:bg-amber-700 text-white border-0">
-              🏆 Generate Championship Brackets
+              {cs === 'group_stage_completed' ? '🏆 Generate Championship Matches' : '🔁 Rebuild championship matches'}
+            </Button>
+          )}
+          {(cs === 'knockouts_active' || cs === 'knockouts_generated') && mensNextStages.length > 0 && (
+            <Button onClick={generateNextMensStage} disabled={loading} className="bg-teal-600 hover:bg-teal-700 text-white border-0">
+              ▶️ Generate next men’s stage
             </Button>
           )}
           {!tournament.isSimulation && (
@@ -2618,8 +2578,8 @@ export default function TournamentsPage() {
             {bracketData.gold.length === 0 && bracketData.silver.length === 0 && bracketData.bronze.length === 0 ? (
               <div className="text-center text-slate-400 py-8">
                 {cs === 'group_stage_completed'
-                  ? 'Click "Generate Championship Brackets" to create the knockout draws.'
-                  : 'Championship brackets will appear here after the group stage is confirmed.'}
+                  ? 'Click "Generate Championship Matches" to create Gold / Silver / Bronze.'
+                  : 'Championship matches will appear here after the group stage is confirmed.'}
               </div>
             ) : (
               <>
@@ -2637,16 +2597,36 @@ export default function TournamentsPage() {
                     </button>
                   ))}
                 </div>
+                {mensNextStages.length > 0 && (
+                  <Button onClick={generateNextMensStage} disabled={loading} className="bg-teal-600 hover:bg-teal-700 text-white border-0">
+                    Generate next men’s stage ({mensNextStages.join(', ')})
+                  </Button>
+                )}
                 {champSubTab === 'overall' ? (
-                  <OverallStandings bracketData={bracketData} teams={tournament.teams} />
+                  <OverallStandings
+                    matches={[...bracketData.gold, ...bracketData.silver, ...bracketData.bronze]}
+                    teams={tournament.teams}
+                  />
+                ) : mensFormat ? (
+                <MensChampionshipPanel
+                  championship={champSubTab as 'gold' | 'silver' | 'bronze'}
+                  matches={bracketData[champSubTab as 'gold' | 'silver' | 'bronze']}
+                  teams={tournament.teams}
+                  standings={mensStandings[champSubTab as 'gold' | 'silver' | 'bronze']}
+                  onScoreMatch={(matchIndex, match, score1, score2) => {
+                    const realIndex = tournament.matches.findIndex((m: any) => m.bracketMatchId === match._id);
+                    updateMatchScore(realIndex >= 0 ? realIndex : matchIndex, score1, score2);
+                    setTimeout(() => fetchBrackets(tournament._id), 600);
+                  }}
+                />
                 ) : (
                 <ChampionshipBracket
                   championship={champSubTab as 'gold' | 'silver' | 'bronze'}
                   matches={bracketData[champSubTab as 'gold' | 'silver' | 'bronze']}
                   teams={tournament.teams}
-                  onScoreMatch={(matchIndex, _match, score1, score2) => {
-                    updateMatchScore(matchIndex, score1, score2);
-                    // Refresh brackets after a short delay to reflect winner advancement
+                  onScoreMatch={(matchIndex, match, score1, score2) => {
+                    const realIndex = tournament.matches.findIndex((m: any) => m.bracketMatchId === match._id);
+                    updateMatchScore(realIndex >= 0 ? realIndex : matchIndex, score1, score2);
                     setTimeout(() => fetchBrackets(tournament._id), 600);
                   }}
                 />
@@ -3018,6 +2998,7 @@ export default function TournamentsPage() {
                           setCurrentStandings([]);
                           if (tournament.tournamentFormat === 'championship-groups') {
                             fetchRegistrations(tournament._id);
+                            fetchBrackets(tournament._id);
                             setChampTab('registrations');
                           }
 

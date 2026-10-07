@@ -4,6 +4,7 @@ import connectDB from '@/lib/mongodb';
 import Tournament from '@/models/Tournament';
 import User from '@/models/User';
 import { generateChampionshipBrackets } from '@/lib/championship/generateBrackets';
+import { generateMensOpeningStage, splitQualifiersByCategory } from '@/lib/championship/mensFormat';
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'your-jwt-secret-here-change-this-in-production';
 
@@ -34,9 +35,18 @@ export async function POST(
     if (tournament.tournamentFormat !== 'championship-groups') {
       return NextResponse.json({ error: 'Not a championship-groups tournament' }, { status: 400 });
     }
-    if (tournament.championshipStatus !== 'group_stage_completed') {
+    const canStart = tournament.championshipStatus === 'group_stage_completed';
+    const alreadyGenerated = ['knockouts_active', 'knockouts_generated'].includes(tournament.championshipStatus ?? '');
+    const champScored = (tournament.matches ?? []).some(
+      (m: any) => m.phase && m.phase !== 'group' && m.status === 'completed'
+    );
+    const canRegenerate = alreadyGenerated && (tournament.isSimulation || !champScored);
+
+    if (!canStart && !canRegenerate) {
       return NextResponse.json(
-        { error: 'Group stage must be confirmed before generating championship brackets' },
+        { error: champScored
+          ? 'Championship scores already exist. Use a test copy to regenerate.'
+          : 'Group stage must be confirmed before generating championship matches' },
         { status: 400 }
       );
     }
@@ -44,31 +54,56 @@ export async function POST(
       return NextResponse.json({ error: 'No qualification snapshot found' }, { status: 400 });
     }
 
+    if (canRegenerate) {
+      tournament.matches = (tournament.matches ?? []).filter((m: any) => m.phase === 'group') as any;
+      tournament.bracketMatches = [] as any;
+    }
+
     const numCourts: number = tournament.numberOfCourts ?? 1;
-    // Championships start one session after the last group match
     const groupMaxSlot = tournament.matches.reduce(
       (max: number, m: any) => Math.max(max, m.timeSlot ?? 0), 0
     );
-    const champStartSlot = groupMaxSlot + 1;
+    let nextSlot = groupMaxSlot + 1;
+    let nextIndex = tournament.matches.length;
 
-    const { bracketMatches, globalMatches } = generateChampionshipBrackets(
+    const { men, women } = splitQualifiersByCategory(
       tournament.qualificationSnapshot as any[],
-      tournament.teams,
-      tournament.matches.length,
-      numCourts,
-      champStartSlot
+      tournament.groups ?? []
     );
 
-    tournament.bracketMatches = bracketMatches as any[];
-    tournament.matches.push(...(globalMatches as any[]));
+    const allBracket: any[] = [];
+    const allGlobal: any[] = [];
+
+    if (men.length) {
+      const mens = generateMensOpeningStage(men, nextIndex, numCourts, nextSlot);
+      allBracket.push(...mens.bracketMatches);
+      allGlobal.push(...mens.globalMatches);
+      nextIndex += mens.globalMatches.length;
+      nextSlot = mens.bracketMatches.reduce((max, m) => Math.max(max, m.timeSlot ?? 0), nextSlot - 1) + 1;
+    }
+
+    if (women.length) {
+      const womens = generateChampionshipBrackets(
+        women,
+        tournament.teams,
+        nextIndex,
+        numCourts,
+        nextSlot
+      );
+      allBracket.push(...womens.bracketMatches);
+      allGlobal.push(...womens.globalMatches);
+    }
+
+    tournament.bracketMatches = allBracket;
+    tournament.matches.push(...allGlobal);
     tournament.championshipStatus = 'knockouts_active';
 
     await tournament.save();
 
     return NextResponse.json({
-      message: 'Championship brackets generated',
-      bracketMatchCount: bracketMatches.length,
-      globalMatchesAdded: globalMatches.length,
+      message: 'Championship matches generated',
+      bracketMatchCount: allBracket.length,
+      globalMatchesAdded: allGlobal.length,
       championshipStatus: tournament.championshipStatus,
     });
   } catch (error) {

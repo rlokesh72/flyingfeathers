@@ -21,6 +21,7 @@ import { IQualificationEntry } from './qualifiers';
 export interface IBracketMatchCreate {
   _id: mongoose.Types.ObjectId;
   championship: 'gold' | 'silver' | 'bronze';
+  category?: 'men' | 'women';
   round: string;
   sequence: number;
   team1Index?: number;
@@ -51,7 +52,8 @@ export interface IMatchCreate {
 
 function buildBracketStructure(
   teams: number[],
-  championship: 'gold' | 'silver' | 'bronze'
+  championship: 'gold' | 'silver' | 'bronze',
+  category: 'men' | 'women' = 'women'
 ): IBracketMatchCreate[][] {
   /** Returns rounds in order (round-of-32 first, final last). */
   const count = teams.length;
@@ -66,6 +68,7 @@ function buildBracketStructure(
       roundMatches.push({
         _id: new mongoose.Types.ObjectId(),
         championship,
+        category,
         round: rounds[r],
         sequence: s,
         status: 'scheduled',
@@ -196,9 +199,9 @@ export function generateChampionshipBrackets(
   };
 
   // Build bracket structures (without scheduling yet)
-  const goldRounds   = goldQs.length   ? buildBracketStructure(goldQs.map((q) => q.teamIndex), 'gold')   : [];
-  const silverRounds = silverQs.length ? buildBracketStructure(arrangeSilverBracket(silverQs), 'silver') : [];
-  const bronzeRounds = bronzeQs.length ? buildBracketStructure(bronzeQs.map((q) => q.teamIndex), 'bronze') : [];
+  const goldRounds   = goldQs.length   ? buildBracketStructure(goldQs.map((q) => q.teamIndex), 'gold', 'women')   : [];
+  const silverRounds = silverQs.length ? buildBracketStructure(arrangeSilverBracket(silverQs), 'silver', 'women') : [];
+  const bronzeRounds = bronzeQs.length ? buildBracketStructure(bronzeQs.map((q) => q.teamIndex), 'bronze', 'women') : [];
 
   // Schedule all rounds across courts, interleaving all three brackets
   scheduleAllRounds(
@@ -208,12 +211,15 @@ export function generateChampionshipBrackets(
     existingMatchCount
   );
 
-  // Flatten bracket matches
+  // Flatten in the same order we append to tournament.matches[]
   const allBracket: IBracketMatchCreate[] = [
     ...goldRounds.flat(),
     ...silverRounds.flat(),
     ...bronzeRounds.flat(),
   ];
+  allBracket.forEach((bm, i) => {
+    bm.matchIndex = existingMatchCount + i;
+  });
 
   // Build global matches (for the existing score-logging API)
   const allGlobal: IMatchCreate[] = allBracket.map((bm) => ({
@@ -243,6 +249,9 @@ export function advanceKnockoutWinner(
     (m: any) => m._id.toString() === completedBracketMatchId
   );
   if (!completed || !completed.nextMatchId) return updated;
+  if (winnerTeamIndex !== completed.team1Index && winnerTeamIndex !== completed.team2Index) {
+    return updated;
+  }
 
   const nextId = completed.nextMatchId.toString();
   const nextMatch = updated.find((m: any) => m._id.toString() === nextId);

@@ -3,6 +3,13 @@ import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
 import Tournament from '@/models/Tournament';
 import User from '@/models/User';
+import {
+  inspectMensNextStages,
+  isMensFormat,
+  mensBronzeSixStandings,
+  mensGoldStandings,
+  mensSilverSixStandings,
+} from '@/lib/championship/mensFormat';
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'your-jwt-secret-here-change-this-in-production';
 
@@ -41,7 +48,7 @@ export async function GET(
     }
 
     if (!tournament.bracketMatches || tournament.bracketMatches.length === 0) {
-      return NextResponse.json({ gold: [], silver: [], bronze: [] });
+      return NextResponse.json({ gold: [], silver: [], bronze: [], nextStages: [], mensFormat: false });
     }
 
     const resolveTeam = (teamIndex: number | undefined) => {
@@ -61,7 +68,19 @@ export async function GET(
     const silver = tournament.bracketMatches.filter((bm: any) => bm.championship === 'silver').map(resolveMatch);
     const bronze = tournament.bracketMatches.filter((bm: any) => bm.championship === 'bronze').map(resolveMatch);
 
-    return NextResponse.json({ gold, silver, bronze });
+    const raw = tournament.bracketMatches.map((bm: any) => (bm.toObject ? bm.toObject() : bm));
+    return NextResponse.json({
+      gold,
+      silver,
+      bronze,
+      mensFormat: isMensFormat(raw),
+      nextStages: inspectMensNextStages(raw),
+      mensStandings: {
+        gold: mensGoldStandings(raw, tournament.teams),
+        silver: mensSilverSixStandings(raw, tournament.teams),
+        bronze: mensBronzeSixStandings(raw, tournament.teams),
+      },
+    });
   } catch (error) {
     console.error('Error fetching championships:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

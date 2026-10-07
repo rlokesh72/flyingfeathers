@@ -38,11 +38,14 @@ const ROUND_LABELS: Record<string, string> = {
   round_of_32: 'Round of 32',
   round_of_16: 'Round of 16',
   quarter_final: 'Quarter Final',
+  round_robin: 'Round Robin',
+  crossover_r1: 'Round 1',
+  crossover_r2: 'Round 2',
   semi_final: 'Semi Final',
   final: 'Final',
 };
 
-const ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'final'];
+const ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'round_robin', 'crossover_r1', 'crossover_r2', 'semi_final', 'final'];
 
 const CHAMPIONSHIP_COLORS: Record<'gold' | 'silver' | 'bronze', {
   accent: string; border: string; bg: string; badge: string; btn: string;
@@ -180,8 +183,54 @@ function MatchCard({
   );
 }
 
+function deriveRoundRobinPlacements(matches: BracketMatch[], teams: Team[]) {
+  const rr = matches.filter((m) => m.round === 'round_robin');
+  if (!rr.length || rr.some((m) => m.status !== 'completed')) return [];
+
+  const indices = Array.from(new Set(
+    rr.flatMap((m) => [m.team1Index, m.team2Index].filter((idx): idx is number => idx !== undefined && idx >= 0))
+  ));
+  const stats = indices.map((idx) => ({
+    teamIndex: idx,
+    name: teams[idx]?.name ?? `Team ${idx}`,
+    players: teams[idx]?.players ?? [],
+    wins: 0,
+    pointsFor: 0,
+    pointDifference: 0,
+  }));
+  const byIndex = new Map(stats.map((s) => [s.teamIndex, s]));
+
+  for (const match of rr) {
+    if (match.team1Score == null || match.team2Score == null) continue;
+    const s1 = byIndex.get(match.team1Index!);
+    const s2 = byIndex.get(match.team2Index!);
+    if (s1) {
+      s1.pointsFor += match.team1Score;
+      s1.pointDifference += match.team1Score - match.team2Score;
+      if (match.team1Score > match.team2Score) s1.wins++;
+    }
+    if (s2) {
+      s2.pointsFor += match.team2Score;
+      s2.pointDifference += match.team2Score - match.team1Score;
+      if (match.team2Score > match.team1Score) s2.wins++;
+    }
+  }
+
+  stats.sort((a, b) => b.wins - a.wins || b.pointDifference - a.pointDifference || b.pointsFor - a.pointsFor);
+  const labels = ['Champion', 'Runner-Up', '3rd Place', '4th Place'];
+  return stats.map((s, i) => ({
+    place: i + 1,
+    team: { name: s.name, players: s.players },
+    label: labels[i] ?? `${i + 1}th Place`,
+  }));
+}
+
 /* ── Helper: derive placements from a single-elim bracket ── */
 function derivePlacements(matches: BracketMatch[], teams: Team[]) {
+  if (matches.some((m) => m.round === 'round_robin')) {
+    return deriveRoundRobinPlacements(matches, teams);
+  }
+
   const resolve = (idx?: number, obj?: { name: string; players: string[] } | null) =>
     obj ?? (idx !== undefined && idx >= 0 ? teams[idx] ?? null : null);
 
