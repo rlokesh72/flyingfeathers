@@ -363,7 +363,7 @@ test('Men ranking: wins then PD then PF', () => {
   assertEqual(ranked[2].teamIndex, 3, 'loser last');
 });
 
-test('Silver R2 pairs AB winners vs CD winners by R1 PD', () => {
+test('Silver QF is 8 teams: 6 R1 winners plus 2 best losers, seeded 1v8', () => {
   const r1 = [
     { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 0, team1Index: 4, team2Index: 9, team1Score: 21, team2Score: 10, winnerIndex: 4, status: 'completed' },
     { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 1, team1Index: 5, team2Index: 8, team1Score: 21, team2Score: 19, winnerIndex: 5, status: 'completed' },
@@ -372,11 +372,32 @@ test('Silver R2 pairs AB winners vs CD winners by R1 PD', () => {
     { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 4, team1Index: 11, team2Index: 14, team1Score: 21, team2Score: 18, winnerIndex: 11, status: 'completed' },
     { championship: 'silver', round: 'crossover_r1', category: 'men', sequence: 5, team1Index: 12, team2Index: 13, team1Score: 21, team2Score: 16, winnerIndex: 12, status: 'completed' },
   ];
-  assert(inspectMensNextStages(r1).includes('silver_r2'), 'R2 ready after R1');
-  const { bracketMatches } = generateMensNextStage('silver_r2', r1, [], 0, 1, 1);
-  assertEqual(bracketMatches.length, 3, 'three R2 matches');
-  assertEqual(bracketMatches[0].team1Index, 4, 'best AB vs weakest CD');
-  assertEqual(bracketMatches[0].team2Index, 11, 'CD ranked 3rd by PD');
+  assert(inspectMensNextStages(r1).includes('silver_qf'), 'QF ready after R1');
+  const { bracketMatches } = generateMensNextStage('silver_qf', r1, [], 0, 1, 1);
+  assertEqual(bracketMatches.length, 4, 'four quarter-finals');
+  assert(bracketMatches.every((m) => m.round === 'quarter_final'), 'round is quarter_final');
+
+  const teams = new Set(bracketMatches.flatMap((m) => [m.team1Index, m.team2Index]));
+  assertEqual(teams.size, 8, 'eight distinct QF teams');
+  assert(teams.has(8), 'closest R1 loser joins QF');
+  assert(teams.has(14), 'second-closest R1 loser joins QF');
+  assert(!teams.has(15), 'heaviest R1 loser stays out');
+
+  assertEqual(bracketMatches[0].team1Index, 10, 'seed 1 is best R1 winner PD');
+  assertEqual(bracketMatches[0].team2Index, 14, 'seed 8 is the weaker lucky loser');
+  assertEqual(bracketMatches[2].team1Index, 4, 'seed 2 plays seed 7');
+  assertEqual(bracketMatches[2].team2Index, 8, 'best loser is seed 7');
+
+  const completedQf = bracketMatches.map((m, i) => ({
+    ...m,
+    team1Score: 21,
+    team2Score: 10 + i,
+    winnerIndex: m.team1Index,
+    status: 'completed',
+  }));
+  const { bracketMatches: sf } = generateMensNextStage('silver_sf', [...r1, ...completedQf], [], 4, 1, 2);
+  assertEqual(sf.filter((m) => m.round === 'semi_final').length, 2, 'two semis');
+  assertEqual(sf.filter((m) => m.round === 'final').length, 1, 'one final');
 });
 
 // ---------------------------------------------------------------------------

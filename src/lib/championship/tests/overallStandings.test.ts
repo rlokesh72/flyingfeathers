@@ -79,7 +79,7 @@ test('Women bronze ignores a leaked gold team that was written into the final', 
   assertEqual(women.bronze.length, 4, 'bronze roster is the four SF teams');
 });
 
-test('Men silver lists six winners then R1 exits with their own stats', () => {
+test('Men silver keeps 2 best R1 losers in the QF pool and lists the other 4 as exits', () => {
   const r1 = [
     { championship: 'silver', category: 'men', round: 'crossover_r1', team1Index: 0, team2Index: 1, team1Score: 21, team2Score: 10, winnerIndex: 0, status: 'completed' },
     { championship: 'silver', category: 'men', round: 'crossover_r1', team1Index: 2, team2Index: 3, team1Score: 21, team2Score: 19, winnerIndex: 2, status: 'completed' },
@@ -90,9 +90,11 @@ test('Men silver lists six winners then R1 exits with their own stats', () => {
   ];
   const { men } = buildOverallStandings(r1, teams);
   assertEqual(men.silver.length, 12, 'all silver participants');
-  assertEqual(men.silver.filter((r) => r.label === 'R1 exit').length, 6, 'six exits');
+  assertEqual(men.silver.filter((r) => r.label === 'R1 exit').length, 4, 'four R1 exits');
+  assertEqual(men.silver.some((r) => r.teamIndex === 3 && r.label !== 'R1 exit'), true, 'closest loser stays in QF pool');
+  assertEqual(men.silver.some((r) => r.teamIndex === 9 && r.label !== 'R1 exit'), true, 'second-closest loser stays in QF pool');
+  assertEqual(men.silver.find((r) => r.teamIndex === 7)?.label, 'R1 exit', 'heaviest loser exits');
   assertEqual(men.silver[0].wins, 1, 'winner has the R1 win');
-  assertEqual(men.silver[6].wins, 0, 'first exit has 0 wins');
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

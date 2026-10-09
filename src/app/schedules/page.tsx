@@ -15,7 +15,7 @@ interface QEntry { groupName: string; rank: number; teamIndex: number; teamName:
 interface Tournament { _id: string; name: string; description?: string; numberOfTeams: number; numberOfCourts?: number; tournamentFormat?: string; teamsPerGroup?: number; numberOfGroups?: number; maxTeams?: number; championshipStatus?: string; qualificationRules?: { gold: number[]; silver: number[]; bronze: number[] }; womenQualificationRules?: { gold: number[]; silver: number[]; bronze: number[] }; groups?: Group[]; qualificationSnapshot?: QEntry[]; bracketMatches?: BracketMatch[]; teams: {name:string;players:string[]}[]; matches: Match[]; scheduledDate: string; status: string; createdBy?: {name:string;email:string}; createdAt: string; }
 
 /* ─── Constants ─────────────────────────────────────────────── */
-const ROUND_ORDER = ['round_of_32','round_of_16','quarter_final','round_robin','crossover_r1','crossover_r2','semi_final','final'];
+const ROUND_ORDER = ['round_of_32','round_of_16','round_robin','crossover_r1','quarter_final','crossover_r2','semi_final','final'];
 const ROUND_LABELS: Record<string,string> = { round_of_32:'R32', round_of_16:'R16', quarter_final:'QF', round_robin:'RR', crossover_r1:'R1', crossover_r2:'R2', semi_final:'SF', final:'Final' };
 const C_COLORS: Record<string,{accent:string;border:string;bg:string;pill:string}> = {
   gold:   { accent:'text-yellow-400', border:'border-yellow-500/30', bg:'bg-yellow-900/20',  pill:'bg-yellow-900/40 text-yellow-300 border border-yellow-600/40' },

@@ -1,4 +1,4 @@
-import { rankMensTeams, type MensTeamStat } from './mensFormat';
+import { rankMensTeams, silverQuarterFinalists, type MensTeamStat } from './mensFormat';
 
 export type ChampionshipTier = 'gold' | 'silver' | 'bronze';
 
@@ -173,25 +173,28 @@ function mensSilver(matches: any[], teams: { name?: string; players?: string[] }
   const r1 = ofRound(matches, 'crossover_r1');
   if (!r1.length) return [];
 
-  const pool = [...r1, ...ofRound(matches, 'crossover_r2')];
-  const knockout = [...ofRound(matches, 'semi_final'), ...ofRound(matches, 'final')];
+  const qf = [...ofRound(matches, 'quarter_final'), ...ofRound(matches, 'crossover_r2')];
+  const knockout = [...qf, ...ofRound(matches, 'semi_final'), ...ofRound(matches, 'final')];
 
   if (!allComplete(r1)) {
     return withPlaces(rankMensTeams(teamIndicesIn(r1), r1, teams), false);
   }
 
-  const winners = r1.map(winnerOf).filter((idx): idx is number => idx !== undefined);
-  const losers = r1.map(loserOf).filter((idx): idx is number => idx !== undefined);
-  const winnerRows = applyKnockoutFinish(
-    rankMensTeams(winners, [...pool, ...knockout], teams),
+  const { winners, luckyLosers } = silverQuarterFinalists(r1);
+  const luckySet = new Set(luckyLosers);
+  const exits = r1.map(loserOf).filter((idx): idx is number => idx !== undefined && !luckySet.has(idx));
+  const qfRoster = [...winners, ...luckyLosers];
+
+  const qfRows = applyKnockoutFinish(
+    rankMensTeams(qfRoster, [...r1, ...knockout], teams),
     knockout
   );
-  const loserRows = withPlaces(rankMensTeams(losers, r1, teams), allComplete(r1)).map((row, i) => ({
+  const exitRows = withPlaces(rankMensTeams(exits, r1, teams), allComplete(r1)).map((row, i) => ({
     ...row,
-    place: winnerRows.length + i + 1,
+    place: qfRows.length + i + 1,
     label: 'R1 exit',
   }));
-  return [...winnerRows, ...loserRows];
+  return [...qfRows, ...exitRows];
 }
 
 function mensBronze(matches: any[], teams: { name?: string; players?: string[] }[]): OverallRow[] {

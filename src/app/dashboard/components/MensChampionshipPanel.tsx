@@ -128,7 +128,7 @@ export default function MensChampionshipPanel({ championship, matches, teams, st
             />
           )}
           {championship === 'silver' && (
-            <StandingsTable title="Men’s Silver leaderboard (6 winners)" standings={standings} accent={COLORS.silver} highlightTop={4} />
+            <StandingsTable title="Men’s Silver leaderboard (8 quarter-finalists)" standings={standings} accent={COLORS.silver} highlightTop={4} />
           )}
           {championship === 'bronze' && (
             <StandingsTable title="Men’s Bronze leaderboard" standings={standings} accent={COLORS.bronze} highlightTop={4} />

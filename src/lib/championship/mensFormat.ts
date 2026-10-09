@@ -3,7 +3,7 @@ import { inferGroupCategory } from './qualification';
 import type { IQualificationEntry } from './qualifiers';
 import type { IBracketMatchCreate, IMatchCreate } from './generateBrackets';
 
-export type MensStageAction = 'silver_r2' | 'silver_sf' | 'bronze_sf';
+export type MensStageAction = 'silver_qf' | 'silver_sf' | 'bronze_sf';
 
 const PHASE: Record<'gold' | 'silver' | 'bronze', IMatchCreate['phase']> = {
   gold: 'gold_knockout',
@@ -151,6 +151,13 @@ function ofRound(matches: any[], championship: string, round: string) {
   return matches.filter((m) => isMens(m) && m.championship === championship && m.round === round);
 }
 
+function silverSecondRound(matches: any[]) {
+  return [
+    ...ofRound(matches, 'silver', 'quarter_final'),
+    ...ofRound(matches, 'silver', 'crossover_r2'),
+  ];
+}
+
 function allComplete(matches: any[]) {
   return matches.length > 0 && matches.every((m) => m.status === 'completed');
 }
@@ -158,13 +165,13 @@ function allComplete(matches: any[]) {
 export function inspectMensNextStages(bracketMatches: any[]): MensStageAction[] {
   const actions: MensStageAction[] = [];
   const silverR1 = ofRound(bracketMatches, 'silver', 'crossover_r1');
-  const silverR2 = ofRound(bracketMatches, 'silver', 'crossover_r2');
+  const silverQf = silverSecondRound(bracketMatches);
   const silverSf = ofRound(bracketMatches, 'silver', 'semi_final');
   const bronzeR1 = ofRound(bracketMatches, 'bronze', 'crossover_r1');
   const bronzeSf = ofRound(bracketMatches, 'bronze', 'semi_final');
 
-  if (allComplete(silverR1) && silverR2.length === 0) actions.push('silver_r2');
-  if (allComplete(silverR2) && silverSf.length === 0) actions.push('silver_sf');
+  if (allComplete(silverR1) && silverQf.length === 0) actions.push('silver_qf');
+  if (allComplete(silverQf) && silverSf.length === 0) actions.push('silver_sf');
   if (allComplete(bronzeR1) && bronzeSf.length === 0) actions.push('bronze_sf');
   return actions;
 }
@@ -183,6 +190,50 @@ function winnerPointDiff(match: any): number {
   return w === match.team1Index
     ? match.team1Score - match.team2Score
     : match.team2Score - match.team1Score;
+}
+
+function loserIndex(match: any): number | undefined {
+  const w = winnerIndex(match);
+  if (w === undefined) return undefined;
+  if (match.team1Index >= 0 && match.team1Index !== w) return match.team1Index;
+  if (match.team2Index >= 0 && match.team2Index !== w) return match.team2Index;
+  return undefined;
+}
+
+function pointsFor(match: any, teamIndex: number): number {
+  if (match.team1Score == null || match.team2Score == null) return 0;
+  return teamIndex === match.team1Index ? match.team1Score : match.team2Score;
+}
+
+function compareByPdThenPf(a: { pd: number; pf: number }, b: { pd: number; pf: number }) {
+  if (b.pd !== a.pd) return b.pd - a.pd;
+  return b.pf - a.pf;
+}
+
+export function silverQuarterFinalists(r1: any[]): { winners: number[]; luckyLosers: number[] } {
+  const winners = r1.map((m) => {
+    const teamIndex = winnerIndex(m);
+    if (teamIndex === undefined) return null;
+    return { teamIndex, pd: winnerPointDiff(m), pf: pointsFor(m, teamIndex) };
+  }).filter((x): x is { teamIndex: number; pd: number; pf: number } => !!x)
+    .sort(compareByPdThenPf);
+
+  const losers = r1.map((m) => {
+    const teamIndex = loserIndex(m);
+    if (teamIndex === undefined) return null;
+    const pd = m.team1Score == null || m.team2Score == null
+      ? 0
+      : teamIndex === m.team1Index
+        ? m.team1Score - m.team2Score
+        : m.team2Score - m.team1Score;
+    return { teamIndex, pd, pf: pointsFor(m, teamIndex) };
+  }).filter((x): x is { teamIndex: number; pd: number; pf: number } => !!x)
+    .sort(compareByPdThenPf);
+
+  return {
+    winners: winners.map((x) => x.teamIndex),
+    luckyLosers: losers.slice(0, 2).map((x) => x.teamIndex),
+  };
 }
 
 export interface MensTeamStat {
@@ -279,28 +330,22 @@ function createSemiAndFinal(
   return [sf1, sf2, finalMatch];
 }
 
-function silverR2Matches(bracketMatches: any[]): IBracketMatchCreate[] {
+function silverQuarterFinalMatches(bracketMatches: any[]): IBracketMatchCreate[] {
   const r1 = ofRound(bracketMatches, 'silver', 'crossover_r1');
-  const ab = r1.filter((m) => m.sequence < 3).map((m) => ({
-    teamIndex: winnerIndex(m),
-    pd: winnerPointDiff(m),
-  })).filter((x) => x.teamIndex !== undefined) as { teamIndex: number; pd: number }[];
-  const cd = r1.filter((m) => m.sequence >= 3).map((m) => ({
-    teamIndex: winnerIndex(m),
-    pd: winnerPointDiff(m),
-  })).filter((x) => x.teamIndex !== undefined) as { teamIndex: number; pd: number }[];
+  const { winners, luckyLosers } = silverQuarterFinalists(r1);
+  if (winners.length < 6 || luckyLosers.length < 2) return [];
 
-  ab.sort((a, b) => b.pd - a.pd);
-  cd.sort((a, b) => b.pd - a.pd);
-
-  const pairs: Array<[number, number]> = [];
-  if (ab[0] && cd[2]) pairs.push([ab[0].teamIndex, cd[2].teamIndex]);
-  if (ab[1] && cd[1]) pairs.push([ab[1].teamIndex, cd[1].teamIndex]);
-  if (ab[2] && cd[0]) pairs.push([ab[2].teamIndex, cd[0].teamIndex]);
+  const seeds = [...winners, ...luckyLosers];
+  const pairs: Array<[number, number]> = [
+    [seeds[0], seeds[7]],
+    [seeds[3], seeds[4]],
+    [seeds[1], seeds[6]],
+    [seeds[2], seeds[5]],
+  ];
 
   return pairs.map(([t1, t2], sequence) => makeMatch({
     championship: 'silver',
-    round: 'crossover_r2',
+    round: 'quarter_final',
     sequence,
     team1Index: t1,
     team2Index: t2,
@@ -317,15 +362,15 @@ export function generateMensNextStage(
 ): { bracketMatches: IBracketMatchCreate[]; globalMatches: IMatchCreate[] } {
   let created: IBracketMatchCreate[] = [];
 
-  if (action === 'silver_r2') {
-    created = silverR2Matches(bracketMatches);
+  if (action === 'silver_qf') {
+    created = silverQuarterFinalMatches(bracketMatches);
   }
 
   if (action === 'silver_sf') {
     const r1 = ofRound(bracketMatches, 'silver', 'crossover_r1');
-    const r2 = ofRound(bracketMatches, 'silver', 'crossover_r2');
-    const six = r1.map(winnerIndex).filter((idx): idx is number => idx !== undefined);
-    const ranked = rankMensTeams(six, [...r1, ...r2], teams);
+    const qf = silverSecondRound(bracketMatches);
+    const four = qf.map(winnerIndex).filter((idx): idx is number => idx !== undefined);
+    const ranked = rankMensTeams(four, [...r1, ...qf], teams);
     created = createSemiAndFinal('silver', ranked);
   }
 
@@ -377,10 +422,10 @@ export function mensGoldStandings(bracketMatches: any[], teams: { name?: string;
 
 export function mensSilverSixStandings(bracketMatches: any[], teams: { name?: string; players?: string[] }[]) {
   const r1 = ofRound(bracketMatches, 'silver', 'crossover_r1');
-  const r2 = ofRound(bracketMatches, 'silver', 'crossover_r2');
+  const qf = silverSecondRound(bracketMatches);
   if (!allComplete(r1)) return [];
-  const six = r1.map(winnerIndex).filter((idx): idx is number => idx !== undefined);
-  return rankMensTeams(six, [...r1, ...r2], teams);
+  const { winners, luckyLosers } = silverQuarterFinalists(r1);
+  return rankMensTeams([...winners, ...luckyLosers], [...r1, ...qf], teams);
 }
 
 export function mensBronzeSixStandings(bracketMatches: any[], teams: { name?: string; players?: string[] }[]) {
@@ -392,6 +437,6 @@ export function mensBronzeSixStandings(bracketMatches: any[], teams: { name?: st
 
 export function isMensFormat(bracketMatches: any[]) {
   return bracketMatches.some((m) =>
-    isMens(m) && (m.round === 'round_robin' || m.round === 'crossover_r1' || m.round === 'crossover_r2')
+    isMens(m) && (m.round === 'round_robin' || m.round === 'crossover_r1' || m.round === 'crossover_r2' || m.round === 'quarter_final')
   );
 }

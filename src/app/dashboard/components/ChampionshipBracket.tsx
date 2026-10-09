@@ -45,7 +45,7 @@ const ROUND_LABELS: Record<string, string> = {
   final: 'Final',
 };
 
-const ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'round_robin', 'crossover_r1', 'crossover_r2', 'semi_final', 'final'];
+const ROUND_ORDER = ['round_of_32', 'round_of_16', 'round_robin', 'crossover_r1', 'quarter_final', 'crossover_r2', 'semi_final', 'final'];
 
 const CHAMPIONSHIP_COLORS: Record<'gold' | 'silver' | 'bronze', {
   accent: string; border: string; bg: string; badge: string; btn: string;
